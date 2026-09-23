@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>VSAM → Azure | Demonstração guiada</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+    :root {
+      --cp-card-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--cp-bg); color: var(--cp-text); font: 16px/1.5 "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; }
+    button, input, select { font: inherit; }
+    button, input, select, .download { border: 1px solid var(--cp-border-strong); border-radius: 0.625rem; }
+    button, .download { padding: 10px 16px; background: var(--cp-surface); color: var(--cp-text); cursor: pointer; font-weight: 600; }
+    button:hover:not(:disabled), .download:hover:not([aria-disabled="true"]) { background: var(--cp-accent-soft); border-color: var(--cp-accent); }
+    button:disabled, [aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+    :focus-visible { outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+    input, select { min-width: 0; padding: 10px 12px; background: var(--cp-surface); color: var(--cp-text); width: 100%; }
+    a { color: var(--cp-link); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: clamp(1.75rem, 2.8vw, 2.5rem); line-height: 1.2; letter-spacing: -.035em; margin-bottom: 12px; }
+    h2 { font-size: 1.3rem; line-height: 1.3; margin-bottom: 12px; }
+    h3 { font-size: 1rem; margin-bottom: 12px; }
+    p { margin-bottom: 16px; }
+    small, .muted { color: var(--cp-text-muted); }
+    code, pre, .mono { font-family: Consolas, "Courier New", Courier, monospace; }
+    code { overflow-wrap: anywhere; }
+    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .82rem; line-height: 1.65; }
+    .shell { width: min(1600px, 100%); margin: auto; padding: 32px; }
+    .masthead { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 20px; }
+    .eyebrow { color: var(--cp-accent); font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 12px; }
+    .subtitle { max-width: 880px; color: var(--cp-text-muted); margin-bottom: 0; }
+    .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+    .badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--cp-border); border-radius: 0.625rem; font-size: .75rem; font-weight: 600; background: var(--cp-bg-elevated); }
+    .cloud { color: var(--cp-success); }
+    .notice { padding: 12px 16px; border-left: 3px solid var(--cp-accent); background: var(--cp-accent-soft); border-radius: 0.625rem; font-size: .875rem; }
+    .card { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 16px; box-shadow: var(--cp-card-shadow); padding: 24px; }
+    .auth { max-width: 600px; margin: 32px auto; }
+    .field { display: grid; gap: 8px; margin-bottom: 16px; }
+    label { font-size: .875rem; font-weight: 600; }
+    .primary { background: var(--cp-accent); color: var(--cp-accent-fg); border-color: var(--cp-accent); }
+    .primary:hover:not(:disabled) { background: var(--cp-accent-hover); color: var(--cp-accent-fg); }
+    .status-line { min-height: 32px; padding: 4px 0; color: var(--cp-text-muted); font-size: .875rem; }
+    .error { border: 1px solid var(--cp-danger); border-left-width: 4px; color: var(--cp-text); background: var(--cp-surface); border-radius: 0.625rem; padding: 12px 16px; margin: 12px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .pipeline { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 20px 0; }
+    .step { display: grid; text-align: left; align-content: start; gap: 8px; padding: 16px; min-height: 130px; border-color: var(--cp-border); }
+    .step[aria-current="step"] { border-color: var(--cp-accent); box-shadow: inset 0 -3px var(--cp-accent); background: var(--cp-accent-soft); }
+    .step-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: .75rem; color: var(--cp-text-muted); }
+    .step-number { font-family: Consolas, "Courier New", Courier, monospace; color: var(--cp-accent); font-size: 1rem; }
+    .step-label { line-height: 1.35; }
+    .step-state { font-size: .75rem; font-weight: 400; color: var(--cp-text-muted); }
+    .completed .step-state { color: var(--cp-success); }
+    .failed .step-state { color: var(--cp-danger); }
+    .running .step-state { color: var(--cp-accent); }
+    .runbar { display: flex; flex-wrap: wrap; gap: 16px 32px; padding: 16px 20px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 0.625rem; margin-bottom: 20px; }
+    .runbar > div { min-width: 0; }
+    .runbar dt { color: var(--cp-text-muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; }
+    .runbar dd { margin: 4px 0 0; font-size: .875rem; overflow-wrap: anywhere; }
+    .workspace { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+    .controls { display: grid; gap: 20px; }
+    .controls .card { padding: 20px; }
+    .full { width: 100%; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row > input { flex: 1; }
+    .section-label { color: var(--cp-text-muted); font-size: .75rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin: 20px 0 8px; }
+    .small { font-size: .8125rem; }
+    .instruction { color: var(--cp-text-muted); font-size: .9375rem; }
+    .controls .primary { margin: 8px 0 12px; }
+    .downloads { display: grid; gap: 8px; margin-top: 12px; }
+    .download { display: flex; justify-content: space-between; gap: 12px; font-size: .8125rem; text-decoration: none; }
+    .evidence { min-width: 0; padding: 0; overflow: hidden; }
+    .evidence-head { display: flex; justify-content: space-between; gap: 20px; padding: 24px 24px 16px; }
+    .evidence-head h2 { margin-bottom: 8px; }
+    .evidence-head .badge { align-self: flex-start; white-space: nowrap; }
+    .tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--cp-border); overflow-x: auto; }
+    .tab { border: 0; border-bottom: 3px solid var(--cp-surface); border-radius: 0; font-size: .875rem; }
+    .tab[aria-selected="true"] { color: var(--cp-accent); border-bottom-color: var(--cp-accent); }
+    .panel { padding: 24px; min-height: 400px; }
+    .panel-tools { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+    .panel-tools h3 { margin: 0; }
+    .code-box { padding: 16px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 0.625rem; max-height: 520px; overflow: auto; }
+    .metrics { display: grid; gap: 12px; grid-template-columns: 1fr 2fr; margin: 0 0 20px; }
+    .metrics dt { color: var(--cp-text-muted); font-size: .75rem; }
+    .metrics dd { margin: 4px 0 0; font-size: .875rem; overflow-wrap: anywhere; }
+    .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+    .split > section { min-width: 0; }
+    .table-wrap { overflow: auto; max-height: 380px; border: 1px solid var(--cp-border); border-radius: 0.625rem; margin: 12px 0 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: .8rem; text-align: left; }
+    caption { padding: 12px; text-align: left; color: var(--cp-text-muted); }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--cp-border); vertical-align: top; overflow-wrap: anywhere; min-width: 80px; max-width: 360px; }
+    th { background: var(--cp-surface-soft); font-weight: 600; }
+    .service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+    .service { padding: 16px; border: 1px solid var(--cp-border); border-radius: 0.625rem; overflow-wrap: anywhere; }
+    .service.in-step { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+    .service h3 { margin: 8px 0; }
+    .service p { margin-bottom: 8px; }
+    .service .badge { font-size: .6875rem; }
+    details { margin-top: 20px; }
+    summary { cursor: pointer; font-size: .875rem; font-weight: 600; margin-bottom: 12px; }
+    .footnote { margin: 20px 0 0; padding-top: 20px; border-top: 1px solid var(--cp-border); font-size: .8125rem; color: var(--cp-text-muted); }
+    .footnote ul { padding-left: 20px; }
+    .footnote li { margin-bottom: 8px; }
+    .empty { color: var(--cp-text-muted); padding: 28px 0; }
+    @media (min-width: 1450px) { .workspace { grid-template-columns: 360px minmax(0, 1fr); } }
+    @media (max-width: 1100px) {
+      .shell { padding: 24px; }
+      .workspace { grid-template-columns: 300px minmax(0, 1fr); }
+      .split { grid-template-columns: 1fr; }
+      .step { padding: 12px; }
+    }
+    @media (max-width: 800px) {
+      .shell { padding: 16px; }
+      .masthead { flex-direction: column; gap: 16px; }
+      .badges { justify-content: flex-start; }
+      .pipeline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .step { min-height: 112px; }
+      .workspace { grid-template-columns: 1fr; }
+      .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .controls .card:first-child { grid-column: 1 / -1; }
+      .metrics { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      .controls { grid-template-columns: 1fr; }
+      .evidence-head { flex-direction: column; padding: 20px; gap: 8px; }
+      .panel { padding: 16px; }
+      .tabs { padding: 0 12px; }
+      .tab { padding: 10px 12px; }
+      .step-label { font-size: .8125rem; }
+      .step { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Demonstração técnica · passo a passo</p>
+        <h1>Dos bytes de origem à leitura no Azure</h1>
+        <p class="subtitle">Inspecione o arquivo, acompanhe o transporte e reconcilie os dados. Cada clique executa somente uma etapa; as evidências vêm do backend.</p>
+      </div>
+      <div class="badges">
+        <span class="badge">Execução manual</span>
+        <span id="cloud-badge" class="badge cloud" hidden>Azure · configuração autenticada</span>
+      </div>
+    </header>
+    <p class="notice"><strong>Simulador de origem (não é z/OS).</strong> Arquivo de registros fixos, com EBCDIC cp037 e COMP-3; não é um data set VSAM indexado. A demonstração representa o fluxo de offload, não uma conexão com um mainframe.</p>
+    <div id="status" class="status-line" role="status" aria-live="polite" aria-atomic="true">Verificando a sessão…</div>
+    <div id="error" class="error" role="alert" hidden></div>
+
+    <section id="login" class="card auth" aria-labelledby="login-title" hidden>
+      <p class="eyebrow">Acesso à demonstração</p>
+      <h2 id="login-title">Entre para consultar o ambiente</h2>
+      <p class="muted">A configuração e os nomes dos recursos só são carregados após a autenticação.</p>
+      <form id="login-form">
+        <div class="field">
+          <label for="access-code">Código de acesso</label>
+          <input id="access-code" type="password" autocomplete="off" spellcheck="false" required aria-describedby="access-help">
+          <small id="access-help">O código não é salvo no navegador nem incluído no endereço. A sessão utiliza um cookie protegido pelo servidor.</small>
+        </div>
+        <button id="login-button" class="primary full" type="submit">Entrar</button>
+      </form>
+      <button id="reconnect" class="full" type="button" style="margin-top: 12px">Verificar sessão novamente</button>
+    </section>
+
+    <main id="app" hidden>
+      <nav id="pipeline" class="pipeline" aria-label="Etapas do fluxo de dados"></nav>
+      <dl class="runbar">
+        <div><dt>Correlação · execução</dt><dd id="run-id" class="mono">Nenhuma execução selecionada</dd></div>
+        <div><dt>Fase atual</dt><dd id="phase">—</dd></div>
+        <div><dt>Progresso</dt><dd id="progress">0 de 6 etapas</dd></div>
+        <div><dt>Criada em</dt><dd id="created">—</dd></div>
+        <div><dt>Atualizada em</dt><dd id="updated">—</dd></div>
+      </dl>
+      <div class="workspace">
+        <aside class="controls" aria-label="Controles da apresentação">
+          <section class="card">
+            <p id="step-kicker" class="eyebrow">Etapa 01 / 06</p>
+            <h2 id="control-title">Preparar a origem</h2>
+            <p id="instruction" class="instruction"></p>
+            <p id="backend-description" class="small muted" hidden></p>
+            <div class="row"><span id="step-status" class="badge">Não executado</span><span id="duration" class="small muted"></span></div>
+            <button id="execute" class="primary full" type="button" disabled>Executar etapa</button>
+            <p id="execute-help" class="small muted"></p>
+            <p class="small muted"><strong>Pausa manual entre etapas.</strong> O tempo da apresentação não representa a latência de atualização dos dados.</p>
+            <button id="change" class="full" type="button" hidden>Iniciar fase de alteração</button>
+            <p id="change-help" class="small muted" hidden style="margin: 12px 0 0">Avança a fase e reinicia as etapas. A nova origem só é gerada quando você executa a primeira etapa.</p>
+          </section>
+          <section class="card">
+            <h2>Execução</h2>
+            <button id="new-run" class="full" type="button">Nova execução</button>
+            <p class="small muted" style="margin: 8px 0 16px">Apenas reserva uma execução; não gera nem publica dados.</p>
+            <form id="resume-form">
+              <div class="field">
+                <label for="saved-runs">Execuções recentes</label>
+                <select id="saved-runs"><option value="">Selecione uma execução</option></select>
+                <small id="runs-note">A lista será consultada após a autenticação.</small>
+              </div>
+              <div class="field">
+                <label for="resume-id">Identificador da execução</label>
+                <input id="resume-id" type="text" autocomplete="off" spellcheck="false" maxlength="200" placeholder="Informe o runId" required>
+              </div>
+              <button id="resume" class="full" type="submit">Abrir execução</button>
+            </form>
+            <button id="refresh" class="full" type="button" disabled style="margin-top: 8px">Atualizar estado</button>
+          </section>
+          <section class="card">
+            <h2>Artefatos da fase</h2>
+            <p class="small muted">Downloads autenticados, liberados somente após a etapa correspondente.</p>
+            <div id="downloads" class="downloads"></div>
+          </section>
+        </aside>
+        <section class="card evidence" aria-labelledby="evidence-title">
+          <div class="evidence-head">
+            <div>
+              <p class="eyebrow">Evidências da execução</p>
+              <h2 id="evidence-title">Origem · bytes EBCDIC</h2>
+              <p id="summary" class="small muted" style="margin-bottom: 0">Nenhuma evidência recebida.</p>
+              <p id="step-times" class="small muted" style="margin: 8px 0 0"></p>
+            </div>
+            <span id="evidence-state" class="badge">Não executado</span>
+          </div>
+          <div id="tabs" class="tabs" role="tablist" aria-label="Visualização das evidências">
+            <button id="tab-bytes" class="tab" type="button" role="tab" aria-controls="panel-bytes" aria-selected="true">Bytes</button>
+            <button id="tab-fields" class="tab" type="button" role="tab" aria-controls="panel-fields" aria-selected="false" tabindex="-1">Campos</button>
+            <button id="tab-json" class="tab" type="button" role="tab" aria-controls="panel-json" aria-selected="false" tabindex="-1">JSON</button>
+            <button id="tab-services" class="tab" type="button" role="tab" aria-controls="panel-services" aria-selected="false" tabindex="-1">Serviços</button>
+          </div>
+          <div id="panel-bytes" class="panel" role="tabpanel" aria-labelledby="tab-bytes" tabindex="0">
+            <div class="panel-tools"><h3>Bytes recebidos do backend</h3><button id="copy-hex" type="button" disabled>Copiar hexadecimal</button></div>
+            <p id="bytes-origin" class="small muted"></p>
+            <dl class="metrics">
+              <div><dt>Tamanho informado · bytes</dt><dd id="byte-count">Não informado</dd></div>
+              <div><dt>SHA-256 informado</dt><dd id="sha256" class="mono">Não informado</dd></div>
+            </dl>
+            <pre id="hex" class="code-box" aria-label="Conteúdo hexadecimal">Nenhum byte recebido.</pre>
+            <details><summary>Representação Base64</summary><pre id="base64" class="code-box">Não informada pelo backend.</pre></details>
+            <p class="small muted" style="margin-top: 16px">O navegador não decodifica nem inventa bytes. Tamanho, hash e conteúdo são exibidos conforme retornados pela API.</p>
+          </div>
+          <div id="panel-fields" class="panel" role="tabpanel" aria-labelledby="tab-fields" tabindex="0" hidden>
+            <p class="small muted">Compare a evidência binária com o layout do copybook e a saída decodificada. Offsets e comprimentos usam a convenção informada pelo backend; valores monetários em texto são preservados.</p>
+            <div class="split">
+              <section aria-labelledby="layout-title">
+                <h3 id="layout-title">Bytes e layout do copybook</h3>
+                <p id="fields-bytes-origin" class="small muted"></p>
+                <pre id="fields-hex" class="code-box">Nenhum byte recebido.</pre>
+                <div id="layout-table"></div>
+              </section>
+              <section aria-labelledby="decoded-title">
+                <h3 id="decoded-title">Registros decodificados · JSON</h3>
+                <pre id="decoded" class="code-box">Nenhum registro recebido.</pre>
+                <div id="records-table"></div>
+              </section>
+            </div>
+          </div>
+          <div id="panel-json" class="panel" role="tabpanel" aria-labelledby="tab-json" tabindex="0" hidden>
+            <div class="panel-tools"><h3>Resposta da etapa · dados completos</h3><button id="copy-json" type="button" disabled>Copiar JSON</button></div>
+            <pre id="json" class="code-box">Nenhuma resposta de etapa recebida.</pre>
+            <details><summary>Objeto completo da execução, artefatos e histórico</summary><pre id="run-json" class="code-box">Nenhuma execução selecionada.</pre></details>
+          </div>
+          <div id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services" tabindex="0" hidden>
+            <h3>Recursos reais da configuração autenticada</h3>
+            <p class="small muted">O destaque indica os serviços associados à etapa. A configuração identifica o ambiente; a resposta da etapa é a evidência de execução. Os links abrem somente o Azure Portal.</p>
+            <div id="services" class="service-grid"></div>
+            <details><summary>Configuração recebida</summary><pre id="config-json" class="code-box"></pre></details>
+          </div>
+        </section>
+      </div>
+      <footer class="footnote">
+        <p><strong>Limite de atraso na atualização dos dados</strong> · Não é medido pelas pausas manuais desta apresentação. Durações exibidas são as reportadas pelo backend, não uma garantia de serviço.</p>
+        <p>O serviço de computação identificado na configuração executa a orquestração e o parsing; Azure Blob Storage recebe o arquivo; Azure Event Hubs transporta os eventos; Azure Cosmos DB aplica e disponibiliza os dados para leitura.</p>
+        <ul id="limitations"></ul>
+      </footer>
+    </main>
+  </div>
+  <script>
+    (() => {
+      "use strict";
+      const $ = id => document.getElementById(id);
+      const STEPS = [
+        { id: "source", title: "Origem", heading: "Origem · bytes EBCDIC", tab: "bytes",
+          instruction: "Gere o arquivo de registros fixos no simulador. Inspecione os bytes EBCDIC cp037, os campos COMP-3, o tamanho e o hash antes de qualquer transferência." },
+        { id: "transfer", title: "Transferência", heading: "Transferência · arquivo no Blob", tab: "bytes",
+          instruction: "Transfira o arquivo para a área de chegada no Azure Blob Storage. Confira na resposta o objeto gravado e as evidências de integridade disponibilizadas pelo backend." },
+        { id: "parse", title: "Copybook", heading: "Copybook · bytes em campos", tab: "fields",
+          instruction: "Execute o parsing no serviço de computação da aplicação. Compare o layout, os offsets, os comprimentos e o PIC com os registros decodificados, sem converter valores monetários no navegador." },
+        { id: "publish", title: "Publicação", heading: "Publicação · eventos no Event Hubs", tab: "json",
+          instruction: "Publique os eventos no Azure Event Hubs. Inspecione o payload e os identificadores retornados. A publicação, por si só, ainda não comprova a aplicação no destino." },
+        { id: "apply", title: "Aplicação", heading: "Aplicação · dados no Cosmos DB", tab: "json",
+          instruction: "Solicite o consumo e a aplicação dos eventos no Azure Cosmos DB. Examine os resultados, os checkpoints e eventuais erros reais antes de consultar o destino." },
+        { id: "verify", title: "Reconciliação", heading: "Reconciliação · leitura e comparação", tab: "json",
+          instruction: "Leia o destino e compare com a origem conforme a reconciliação do backend. Uma etapa concluída não substitui a análise de divergências na resposta. Só depois inicie uma nova fase de alteração." }
+      ];
+      const ARTIFACTS = [
+        { kind: "source", label: "Arquivo de origem", step: 0 },
+        { kind: "landing", label: "Arquivo recebido no Blob", step: 1 },
+        { kind: "parsed", label: "Registros decodificados", step: 2 },
+        { kind: "events", label: "Eventos publicados", step: 3 },
+        { kind: "checkpoints", label: "Checkpoints de aplicação", step: 4 }
+      ];
+      const TAB_IDS = ["bytes", "fields", "json", "services"];
+      const state = { config: null, run: null, selected: 0, busy: false, activeStep: null,
+        tab: "bytes", pendingHash: false, uncertain: false, hex: null, json: null };
+      const stepButtons = [];
+      const downloadLinks = [];
+      const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+      const pretty = value => JSON.stringify(value, null, 2);
+      const text = value => typeof value === "string" ? value : (value == null ? "—" : pretty(value));
+      const own = (value, key) => object(value) && Object.prototype.hasOwnProperty.call(value, key);
+      const validId = value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value);
+      const node = (tag, content, className) => {
+        const element = document.createElement(tag);
+        if (content !== undefined) element.textContent = text(content);
+        if (className) element.className = className;
+        return element;
+      };
+      function say(message) { $("status").textContent = message; }
+      function showError(message) {
+        $("error").textContent = message;
+        $("error").hidden = !message;
+      }
+      function formatTime(value) {
+        if (!value) return "—";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? text(value) : date.toLocaleString("pt-BR");
+      }
+      function metadata(index) {
+        return state.config?.steps.find(step => step.id === STEPS[index].id);
+      }
+      function stepResult(index = state.selected) {
+        const steps = state.run?.steps;
+        return own(steps, STEPS[index].id) && object(steps[STEPS[index].id]) ? steps[STEPS[index].id] : null;
+      }
+      function stepData(index = state.selected) {
+        const result = stepResult(index);
+        return object(result?.data) ? result.data : {};
+      }
+      function statusLabel(index) {
+        if (state.activeStep === STEPS[index].id) return "Executando";
+        return ({ completed: "Concluído", failed: "Erro real", running: "Executando" })[stepResult(index)?.status] || "Não executado";
+      }
+      function serverRunning() {
+        return state.run && Object.values(state.run.steps).some(step => object(step) && step.status === "running");
+      }
+      function canExecute() {
+        return Boolean(state.config && state.run && !state.busy && !state.uncertain &&
+          !serverRunning() && state.run.stage < 6 && state.selected === state.run.stage);
+      }
+      function runPath(id = state.run?.runId) {
+        if (!validId(id)) throw new Error("Identificador da execução inválido.");
+        return "/api/runs/" + encodeURIComponent(id);
+      }
+      function readHash() {
+        const hash = window.location.hash.slice(1);
+        if (!hash) return "";
+        try {
+          const id = decodeURIComponent(hash.startsWith("run=") ? hash.slice(4) : hash);
+          if (!validId(id)) throw new Error();
+          return id;
+        } catch {
+          throw new Error("O identificador no endereço é inválido. Informe um runId válido para retomar.");
+        }
+      }
+      function saveHash(id) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search + "#run=" + encodeURIComponent(id));
+      }
+      function requireLogin() {
+        state.config = null;
+        state.run = null;
+        state.hex = null;
+        state.json = null;
+        $("saved-runs").replaceChildren(node("option", "Selecione uma execução"));
+        $("saved-runs").firstChild.value = "";
+        $("runs-note").textContent = "Entre para consultar as execuções.";
+        render();
+      }
+      class ApiError extends Error {
+        constructor(message, status = 0) { super(message); this.status = status; }
+      }
+      async function request(path, { method = "GET", body, binary = false, allowEmpty = false } = {}) {
+        if (!path.startsWith("/api/") || new URL(path, window.location.href).origin !== window.location.origin) {
+          throw new ApiError("A aplicação aceita somente requisições à API da mesma origem.");
+        }
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 180000);
+        try {
+          const headers = { Accept: binary ? "application/octet-stream, application/json" : "application/json" };
+          if (method === "POST") headers["X-Demo-Request"] = "1";
+          if (body !== undefined) headers["Content-Type"] = "application/json";
+          const response = await fetch(path, { method, headers, credentials: "same-origin", mode: "same-origin",
+            redirect: "error", cache: "no-store", signal: controller.signal,
+            ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+          if (response.status === 401) {
+            requireLogin();
+            throw new ApiError("A sessão não está autorizada ou expirou. Informe o código de acesso para continuar; o identificador da execução foi preservado no endereço.", 401);
+          }
+          const contentType = response.headers.get("content-type") || "";
+          const isJson = /\bapplication\/(?:[\w.-]+\+)?json\b/i.test(contentType);
+          if (binary && response.ok) {
+            if (/text\/html/i.test(contentType)) throw new ApiError("O servidor retornou HTML em vez do artefato. Verifique a sessão e a rota de download.", response.status);
+            return await response.blob();
+          }
+          let payload;
+          if (isJson || (allowEmpty && response.ok)) {
+            const raw = await response.text();
+            if (allowEmpty && response.ok && !raw.trim()) return null;
+            try { payload = JSON.parse(raw); }
+            catch { throw new ApiError("A API retornou JSON inválido (HTTP " + response.status + "). Atualize o estado antes de repetir uma operação.", response.status); }
+          }
+          if (!response.ok) {
+            const detail = object(payload) ? (payload.detail ?? payload.error ?? payload.message) : null;
+            throw new ApiError("Falha da API (HTTP " + response.status + "). " +
+              (detail != null ? text(detail) : "Resposta sem detalhes JSON; confira o backend e a autenticação."), response.status);
+          }
+          if (!isJson) throw new ApiError("A API retornou uma resposta não JSON (HTTP " + response.status + "). Pode ser uma página HTML do host; nenhuma conclusão foi presumida.", response.status);
+          return payload;
+        } catch (error) {
+          if (error instanceof ApiError) throw error;
+          throw new ApiError(error.name === "AbortError"
+            ? "Tempo de espera da API esgotado. A operação pode continuar no servidor; atualize o estado antes de repetir."
+            : "Não foi possível alcançar a API da mesma origem. Verifique a conexão e o backend. Uma operação enviada pode ainda estar em andamento; atualize o estado antes de repetir.");
+        } finally { window.clearTimeout(timeout); }
+      }
+      async function perform(message, action) {
+        if (state.busy) return;
+        state.busy = true;
+        showError("");
+        say(message);
+        render();
+        try { await action(); }
+        catch (error) {
+          showError(error.message || "Não foi possível concluir a solicitação.");
+          say(error.status === 401 ? "Autenticação necessária." : "A solicitação não foi concluída. Nenhum sucesso foi presumido.");
+        } finally {
+          state.busy = false;
+          state.activeStep = null;
+          render();
+          if (!state.config) $("access-code").focus();
+          if (state.pendingHash) {
+            state.pendingHash = false;
+            if (state.config) void resumeHash();
+          }
+        }
+      }
+      function acceptConfig(config) {
+        if (!object(config) || config.mode !== "azure" || !object(config.host) ||
+            !Array.isArray(config.services) || !Array.isArray(config.steps)) {
+          throw new Error("A configuração recebida não corresponde ao contrato Azure esperado.");
+        }
+        state.config = { ...config, services: config.services.filter(object), steps: config.steps.filter(object) };
+      }
+      function acceptRun(run, expectedId) {
+        if (!object(run) || !validId(run.runId) || !Number.isInteger(run.phase) || run.phase < 0 ||
+            !Number.isInteger(run.stage) || run.stage < 0 || run.stage > 6 || !object(run.steps) ||
+            (expectedId && run.runId !== expectedId)) {
+          throw new Error("A API retornou uma execução incompatível com o contrato. Atualize o estado; a resposta não foi tratada como sucesso.");
+        }
+        state.run = run;
+        state.uncertain = false;
+        $("resume-id").value = run.runId;
+      }
+      function selectStep(index) {
+        state.selected = index;
+        setTab(STEPS[index].tab);
+      }
+      async function loadRun(id, preserveSelection = false) {
+        const run = await request(runPath(id));
+        acceptRun(run, id);
+        if (!preserveSelection) selectStep(Math.min(run.stage, 5));
+        say("Estado consultado. Fase " + run.phase + ": " + run.stage + " de 6 etapas concluídas.");
+      }
+      async function loadRecentRuns() {
+        try {
+          const payload = await request("/api/runs");
+          const list = Array.isArray(payload) ? payload : (Array.isArray(payload?.runs) ? payload.runs : (Array.isArray(payload?.items) ? payload.items : null));
+          $("saved-runs").replaceChildren();
+          const placeholder = node("option", "Selecione uma execução");
+          placeholder.value = "";
+          $("saved-runs").append(placeholder);
+          const runs = (list || []).filter(run => validId(typeof run === "string" ? run : run?.runId)).slice(0, 20);
+          runs.forEach(run => {
+            const id = typeof run === "string" ? run : run.runId;
+            const option = node("option", id + (object(run) && Number.isInteger(run.phase) ? " · fase " + run.phase : ""));
+            option.value = id;
+            $("saved-runs").append(option);
+          });
+          $("runs-note").textContent = !list ? "Formato de lista não reconhecido; retome pelo identificador." :
+            (runs.length ? "Até 20 execuções retornadas pelo backend." : "Nenhuma execução recente retornada.");
+        } catch (error) {
+          if (error.status === 401) throw error;
+          $("runs-note").textContent = "Lista indisponível. Você pode retomar pelo identificador.";
+        }
+      }
+      async function initialize() {
+        acceptConfig(await request("/api/config"));
+        say("Configuração Azure autenticada. Crie ou retome uma execução para começar.");
+        await loadRecentRuns();
+        const id = readHash();
+        if (id) await loadRun(id);
+      }
+      async function resumeHash() {
+        await perform("Consultando a execução do endereço…", async () => {
+          const id = readHash();
+          state.run = null;
+          state.uncertain = false;
+          if (id) await loadRun(id);
+          else { selectStep(0); say("Crie ou retome uma execução. Nenhuma etapa foi executada."); }
+        });
+      }
+      function setTab(id) {
+        state.tab = id;
+        TAB_IDS.forEach(tab => {
+          $("tab-" + tab).setAttribute("aria-selected", String(tab === id));
+          $("tab-" + tab).tabIndex = tab === id ? 0 : -1;
+          $("panel-" + tab).hidden = tab !== id;
+        });
+      }
+      function renderTable(container, rows, columns, caption) {
+        container.replaceChildren();
+        if (!rows.length) { container.append(node("p", "Nenhum campo estruturado informado. Consulte o JSON completo.", "empty small")); return; }
+        const wrap = node("div", undefined, "table-wrap");
+        wrap.tabIndex = 0;
+        wrap.setAttribute("role", "region");
+        wrap.setAttribute("aria-label", caption);
+        const table = node("table");
+        table.append(node("caption", caption));
+        const head = node("thead");
+        const header = node("tr");
+        columns.forEach(column => { const th = node("th", column.label); th.scope = "col"; header.append(th); });
+        head.append(header);
+        table.append(head);
+        const body = node("tbody");
+        rows.slice(0, 100).forEach(row => {
+          const tr = node("tr");
+          columns.forEach(column => tr.append(node("td", column.get(row))));
+          body.append(tr);
+        });
+        table.append(body);
+        wrap.append(table);
+        container.append(wrap);
+        if (rows.length > 100) container.append(node("p", "Exibindo 100 registros na tabela. O JSON preserva todos os dados recebidos.", "small muted"));
+      }
+      function first(value, keys) {
+        for (const key of keys) if (own(value, key) && value[key] != null) return value[key];
+        return undefined;
+      }
+      function byteEvidence() {
+        const indices = [...new Set([state.selected, ...[1, 0].filter(index => index <= state.selected)])];
+        const data = {};
+        const sources = [];
+        const labels = { hex: "Hexadecimal", base64: "Base64", byteCount: "Tamanho", sha256: "SHA-256" };
+        for (const key of Object.keys(labels)) {
+          for (const index of indices) {
+            const candidate = stepData(index);
+            if (own(candidate, key) && candidate[key] != null) {
+              data[key] = candidate[key];
+              sources.push(labels[key] + ": etapa " + (index + 1) + " · " + STEPS[index].title);
+              break;
+            }
+          }
+        }
+        return { data, label: sources.length ? sources.join("; ") + "." : "Nenhuma evidência binária retornada nas etapas disponíveis." };
+      }
+      function portalLink(value) {
+        try {
+          const url = new URL(value);
+          return url.protocol === "https:" && url.hostname === "portal.azure.com" &&
+            !url.username && !url.password && !url.port ? url.href : null;
+        } catch { return null; }
+      }
+      function renderServices() {
+        const container = $("services");
+        container.replaceChildren();
+        if (!state.config) { $("config-json").textContent = ""; return; }
+        const referenced = new Set([
+          ...(Array.isArray(metadata(state.selected)?.serviceIds) ? metadata(state.selected).serviceIds : []),
+          ...(Array.isArray(stepResult()?.services) ? stepResult().services : [])
+        ]);
+        const host = state.config.host;
+        const services = [{ ...host, isHost: true }, ...state.config.services];
+        services.forEach(service => {
+          const card = node("article", undefined, "service" + (referenced.has(service.id) ? " in-step" : ""));
+          card.append(node("span", service.isHost ? "Host da aplicação" : (referenced.has(service.id) ? "Associado à etapa" : "Ambiente autenticado"), "badge"));
+          card.append(node("h3", service.name || "Nome não informado"));
+          card.append(node("p", service.type || "Tipo não informado", "small"));
+          if (service.id != null) card.append(node("p", service.id, "mono small muted"));
+          if (service.role != null) card.append(node("p", service.role, "small muted"));
+          const url = typeof service.portalUrl === "string" ? portalLink(service.portalUrl) : null;
+          if (url) {
+            const link = node("a", "Abrir no Azure Portal");
+            link.href = url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            card.append(link);
+          } else card.append(node("p", "Link do Azure Portal não disponível.", "small muted"));
+          container.append(card);
+        });
+        if (!state.config.services.length) container.append(node("p", "Nenhum serviço foi listado na configuração.", "small muted"));
+        $("config-json").textContent = pretty(state.config);
+      }
+      function renderEvidence() {
+        const result = stepResult();
+        const data = stepData();
+        const bytes = byteEvidence();
+        state.hex = bytes.data.hex == null ? null : text(bytes.data.hex);
+        state.json = result ? pretty(result) : null;
+        $("summary").textContent = result?.summary != null ? text(result.summary) : "Nenhuma evidência recebida para esta etapa.";
+        $("step-times").textContent = result ? "Início: " + formatTime(result.startedAt) + " · Fim: " + formatTime(result.finishedAt) : "";
+        $("evidence-title").textContent = STEPS[state.selected].heading;
+        $("evidence-state").textContent = statusLabel(state.selected);
+        $("bytes-origin").textContent = bytes.label;
+        $("fields-bytes-origin").textContent = bytes.label;
+        $("byte-count").textContent = bytes.data.byteCount == null ? "Não informado" : text(bytes.data.byteCount);
+        $("sha256").textContent = bytes.data.sha256 == null ? "Não informado" : text(bytes.data.sha256);
+        $("hex").textContent = state.hex ?? "Nenhum conteúdo hexadecimal recebido.";
+        $("fields-hex").textContent = state.hex ?? "Nenhum conteúdo hexadecimal recebido.";
+        $("base64").textContent = bytes.data.base64 == null ? "Não informada pelo backend." : text(bytes.data.base64);
+        $("json").textContent = state.json ?? "Nenhuma resposta de etapa recebida.";
+        $("run-json").textContent = state.run ? pretty(state.run) : "Nenhuma execução selecionada.";
+        $("copy-hex").disabled = state.hex == null || state.busy;
+        $("copy-json").disabled = state.json == null || state.busy;
+        const fields = first(data, ["fields"]) ?? data.layout?.fields ?? data.copybook?.fields;
+        const fieldRows = Array.isArray(fields) ? fields.filter(object) :
+          (object(fields) ? Object.entries(fields).map(([name, value]) => object(value) ? { name, ...value } : { name, value }) : []);
+        renderTable($("layout-table"), fieldRows, [
+          { label: "Campo", get: row => first(row, ["name", "field", "fieldName"]) },
+          { label: "Offset", get: row => first(row, ["offset", "byteOffset", "start"]) },
+          { label: "Comprimento", get: row => first(row, ["length", "byteLength", "size"]) },
+          { label: "PIC", get: row => first(row, ["pic", "picture", "PIC"]) }
+        ], "Layout informado pelo backend");
+        const records = first(data, ["records", "decodedRecords", "decoded"]);
+        $("decoded").textContent = records !== undefined ? pretty(records) : "Nenhum registro decodificado informado nesta etapa. Consulte o JSON completo.";
+        const recordRows = Array.isArray(records) ? records.filter(object) : [];
+        const keys = [...new Set(recordRows.slice(0, 100).flatMap(row => Object.keys(row)))].slice(0, 12);
+        renderTable($("records-table"), recordRows, keys.map(key => ({ label: key, get: row => own(row, key) ? row[key] : undefined })), "Amostra tabular · até 12 colunas; JSON sem conversões");
+        renderServices();
+      }
+      function render() {
+        const authenticated = Boolean(state.config);
+        $("login").hidden = authenticated;
+        $("app").hidden = !authenticated;
+        $("cloud-badge").hidden = !authenticated;
+        $("app").setAttribute("aria-busy", String(state.busy));
+        $("login-button").disabled = state.busy;
+        $("access-code").disabled = state.busy;
+        $("reconnect").disabled = state.busy;
+        const run = state.run;
+        $("run-id").textContent = run?.runId || "Nenhuma execução selecionada";
+        $("phase").textContent = run ? text(run.phase) : "—";
+        $("progress").textContent = (run?.stage ?? 0) + " de 6 etapas";
+        $("created").textContent = formatTime(run?.createdAt);
+        $("updated").textContent = formatTime(run?.updatedAt);
+        stepButtons.forEach((button, index) => {
+          button.title.textContent = metadata(index)?.title || STEPS[index].title;
+          button.status.textContent = statusLabel(index);
+          button.element.disabled = state.busy || !authenticated;
+          button.element.className = "step " + (state.activeStep === STEPS[index].id ? "running" : (stepResult(index)?.status || ""));
+          if (state.selected === index) button.element.setAttribute("aria-current", "step");
+          else button.element.removeAttribute("aria-current");
+        });
+        $("step-kicker").textContent = "Etapa " + String(state.selected + 1).padStart(2, "0") + " / 06";
+        $("control-title").textContent = metadata(state.selected)?.title || STEPS[state.selected].title;
+        $("instruction").textContent = STEPS[state.selected].instruction;
+        $("backend-description").textContent = text(metadata(state.selected)?.description ?? "");
+        $("backend-description").hidden = !metadata(state.selected)?.description;
+        $("step-status").textContent = statusLabel(state.selected);
+        const duration = stepResult()?.durationMs;
+        $("duration").textContent = typeof duration === "number" && Number.isFinite(duration) ? duration.toLocaleString("pt-BR") + " ms · backend" : "";
+        $("execute").disabled = !canExecute();
+        $("execute").textContent = state.activeStep ? "Executando etapa…" : "Executar etapa " + (state.selected + 1) + " · " + STEPS[state.selected].title;
+        $("execute-help").textContent = !run ? "Crie ou retome uma execução para habilitar o fluxo." :
+          state.uncertain ? "Resultado incerto da última solicitação. Atualize o estado antes de executar novamente." :
+          serverRunning() ? "O backend informa uma etapa em execução. Atualize o estado para consultar o resultado; nenhuma repetição será automática." :
+          run.stage === 6 ? "Fluxo concluído nesta fase. Inspecione as respostas ou inicie uma fase de alteração." :
+          state.selected < run.stage ? "Etapa já concluída: somente inspeção, sem reexecução." :
+          state.selected > run.stage ? "Conclua primeiro a etapa " + (run.stage + 1) + ". Não há execução automática do fluxo." :
+          "O clique envia somente esta etapa. Confira a resposta antes de avançar.";
+        const allowChange = Boolean(run && run.stage === 6 && run.phase >= 1 && stepResult(5)?.status === "completed");
+        $("change").hidden = !allowChange;
+        $("change-help").hidden = !allowChange;
+        $("change").disabled = state.busy || state.uncertain || Boolean(serverRunning());
+        ["new-run", "resume", "resume-id", "saved-runs"].forEach(id => { $(id).disabled = state.busy || !authenticated; });
+        $("refresh").disabled = state.busy || !run || !authenticated;
+        downloadLinks.forEach(({ element, artifact }) => {
+          const enabled = authenticated && run && !state.busy && run.stage > artifact.step && stepResult(artifact.step)?.status === "completed";
+          element.setAttribute("aria-disabled", String(!enabled));
+          element.tabIndex = enabled ? 0 : -1;
+          if (enabled) element.href = runPath() + "/artifacts/" + artifact.kind;
+          else element.removeAttribute("href");
+        });
+        $("limitations").replaceChildren();
+        (Array.isArray(state.config?.limitations) ? state.config.limitations : []).forEach(item => $("limitations").append(node("li", item)));
+        renderEvidence();
+      }
+      async function copy(value) {
+        if (value == null) return;
+        try {
+          if (!navigator.clipboard?.writeText) throw new Error();
+          await navigator.clipboard.writeText(value);
+          say("Conteúdo copiado para a área de transferência.");
+        } catch {
+          say("Não foi possível copiar. Selecione o texto da evidência e copie manualmente pelo teclado.");
+        }
+      }
+      STEPS.forEach((step, index) => {
+        const element = node("button", undefined, "step");
+        element.type = "button";
+        const top = node("span", undefined, "step-top");
+        top.append(node("span", String(index + 1).padStart(2, "0"), "step-number"));
+        const title = node("span", step.title, "step-label");
+        const status = node("span", "Não executado", "step-state");
+        element.append(top, title, status);
+        element.addEventListener("click", () => { selectStep(index); render(); });
+        $("pipeline").append(element);
+        stepButtons.push({ element, title, status });
+      });
+      ARTIFACTS.forEach(artifact => {
+        const element = node("a", artifact.label, "download");
+        element.setAttribute("aria-disabled", "true");
+        element.addEventListener("click", event => {
+          event.preventDefault();
+          if (element.getAttribute("aria-disabled") === "true") return;
+          const path = runPath() + "/artifacts/" + artifact.kind;
+          const filename = state.run.runId + "-fase-" + state.run.phase + "-" + artifact.kind + (["source", "landing"].includes(artifact.kind) ? ".bin" : ".json");
+          void perform("Baixando artefato autenticado…", async () => {
+            const blob = await request(path, { binary: true });
+            const url = URL.createObjectURL(blob);
+            const anchor = node("a");
+            anchor.href = url;
+            anchor.download = filename;
+            anchor.hidden = true;
+            document.body.append(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+            say("Artefato recebido. Download solicitado ao navegador.");
+          });
+        });
+        $("downloads").append(element);
+        downloadLinks.push({ element, artifact });
+      });
+      TAB_IDS.forEach((id, index) => {
+        $("tab-" + id).addEventListener("click", () => setTab(id));
+        $("tab-" + id).addEventListener("keydown", event => {
+          let next;
+          if (event.key === "ArrowRight") next = (index + 1) % TAB_IDS.length;
+          if (event.key === "ArrowLeft") next = (index + TAB_IDS.length - 1) % TAB_IDS.length;
+          if (event.key === "Home") next = 0;
+          if (event.key === "End") next = TAB_IDS.length - 1;
+          if (next === undefined) return;
+          event.preventDefault();
+          setTab(TAB_IDS[next]);
+          $("tab-" + TAB_IDS[next]).focus();
+        });
+      });
+      $("login-form").addEventListener("submit", event => {
+        event.preventDefault();
+        if (state.busy) return;
+        let token = $("access-code").value;
+        $("access-code").value = "";
+        if (!token) return;
+        void perform("Autenticando a sessão…", async () => {
+          try { await request("/api/session", { method: "POST", body: { token }, allowEmpty: true }); }
+          finally { token = ""; }
+          await initialize();
+        });
+      });
+      $("reconnect").addEventListener("click", () => void perform("Verificando a sessão…", initialize));
+      $("new-run").addEventListener("click", () => void perform("Reservando uma nova execução…", async () => {
+        acceptRun(await request("/api/runs", { method: "POST" }));
+        saveHash(state.run.runId);
+        selectStep(Math.min(state.run.stage, 5));
+        say("Execução reservada. Nenhuma etapa foi acionada pelo navegador.");
+        await loadRecentRuns();
+      }));
+      $("saved-runs").addEventListener("change", () => {
+        if ($("saved-runs").value) $("resume-id").value = $("saved-runs").value;
+      });
+      $("resume-form").addEventListener("submit", event => {
+        event.preventDefault();
+        const id = $("resume-id").value.trim();
+        void perform("Retomando a execução…", async () => {
+          if (!validId(id)) throw new Error("Informe um runId válido: letras, números, ponto, dois-pontos, hífen ou sublinhado.");
+          await loadRun(id);
+          saveHash(id);
+        });
+      });
+      $("refresh").addEventListener("click", () => {
+        if (state.run) void perform("Consultando o estado real no backend…", () => loadRun(state.run.runId, true));
+      });
+      $("execute").addEventListener("click", () => {
+        if (!canExecute()) return;
+        const id = state.run.runId;
+        const step = STEPS[state.selected].id;
+        state.activeStep = step;
+        void perform("Executando somente a etapa " + (state.selected + 1) + ". Aguarde a resposta do backend…", async () => {
+          state.uncertain = true;
+          const run = await request(runPath(id) + "/steps/" + step, { method: "POST" });
+          acceptRun(run, id);
+          const result = stepResult();
+          if (result?.status === "failed") {
+            showError(result.summary || run.error || "O backend reportou erro real nesta etapa.");
+            say("Erro real reportado pelo backend. Consulte as evidências.");
+          } else if (result?.status === "completed") say("Etapa concluída pelo backend. Inspecione as evidências e selecione a próxima etapa quando desejar.");
+          else say("Estado recebido: " + statusLabel(state.selected) + ". Atualize o estado para verificar a conclusão.");
+        });
+      });
+      $("change").addEventListener("click", () => {
+        if (state.busy || state.uncertain || !state.run || state.run.stage !== 6 || state.run.phase < 1 || serverRunning()) return;
+        const id = state.run.runId;
+        void perform("Solicitando a próxima fase de alteração…", async () => {
+          state.uncertain = true;
+          acceptRun(await request(runPath(id) + "/change", { method: "POST" }), id);
+          selectStep(Math.min(state.run.stage, 5));
+          say("Estado da fase recebido. Execute manualmente cada etapa para acompanhar a alteração.");
+        });
+      });
+      $("copy-hex").addEventListener("click", () => void copy(state.hex));
+      $("copy-json").addEventListener("click", () => void copy(state.json));
+      window.addEventListener("hashchange", () => {
+        if (state.busy) { state.pendingHash = true; return; }
+        if (state.config) void resumeHash();
+      });
+      render();
+      void perform("Verificando a sessão e a configuração…", initialize);
+    })();
+  </script>
+</body>
+</html>

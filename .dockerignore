@@ -1,0 +1,10 @@
+**
+!Dockerfile
+!pyproject.toml
+!src/
+!src/vsam_offload/
+!src/vsam_offload/*.py
+!src/vsam_offload/guided_ui.html
+!samples/
+!samples/copybooks/
+!samples/copybooks/*.cbl

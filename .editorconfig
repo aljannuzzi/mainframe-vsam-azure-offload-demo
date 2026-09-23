@@ -1,0 +1,5 @@
+# Markdown documentation uses UTF-8; runtime source encodings are unchanged.
+[*.md]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true

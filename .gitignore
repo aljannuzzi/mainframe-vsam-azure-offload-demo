@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+out/
+*.clixml
+*.pem
+*.key
+*.pfx
+*.pyc
+*.egg-info/
+infra/main.json
+infra/guided-app.json
