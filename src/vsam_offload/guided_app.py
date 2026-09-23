@@ -1,4 +1,4 @@
-"""Authenticated, Azure-only HTTP surface for the guided demonstration."""
+"""Authenticated, Azure-only HTTP surface for the reference implementation."""
 
 import hashlib
 import hmac

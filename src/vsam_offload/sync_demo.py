@@ -1,4 +1,4 @@
-"""Executable control demo using a synthetic committed capture adapter and local SQLite."""
+"""Exercise synchronization controls with a synthetic capture adapter and local SQLite."""
 from __future__ import annotations
 
 import argparse

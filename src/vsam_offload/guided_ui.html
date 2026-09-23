@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>VSAM → Azure | Demonstração guiada</title>
+  <title>VSAM → Azure | Padrão de sincronismo</title>
   <script>
     (() => {
       const param = new URLSearchParams(window.location.search).get("scoutTheme");
@@ -195,6 +195,19 @@
     .architecture-metadata dt { font-size: .8125rem; font-weight: 600; }
     .architecture-metadata dd { margin: 4px 0 0; font-size: .8125rem; overflow-wrap: anywhere; }
     .architecture-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .mainframe-proposal { margin: 16px 0 24px; padding: 20px; border: 2px dashed var(--cp-border-strong); border-radius: 16px; background: var(--cp-bg-elevated); }
+    .mainframe-proposal h3 { margin: 8px 0; font-size: 1.15rem; }
+    .mainframe-proposal .proposal-badge { color: var(--cp-warning); border-color: var(--cp-warning); }
+    .mainframe-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+    .mainframe-inputs article, .mainframe-stages li { min-width: 0; padding: 14px; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); overflow-wrap: anywhere; }
+    .mainframe-inputs h4, .mainframe-stages h4 { margin: 0 0 8px; font-size: .9rem; }
+    .mainframe-inputs p, .mainframe-stages p { margin: 0; font-size: .8125rem; color: var(--cp-text-muted); }
+    .mainframe-join { padding: 10px 14px; border-left: 3px solid var(--cp-accent); font-size: .875rem; }
+    .mainframe-stages { list-style: none; padding: 0; margin: 16px 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .mainframe-stages .stage-index { color: var(--cp-accent); font-weight: 700; font-size: .75rem; }
+    .mainframe-exit { border-top: 1px dashed var(--cp-border-strong); padding-top: 12px; font-size: .875rem; }
+    @media (max-width: 1100px) { .mainframe-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 600px) { .mainframe-inputs, .mainframe-stages { grid-template-columns: 1fr; } .mainframe-proposal { padding: 14px; } }
     @media (min-width: 1450px) { .workspace { grid-template-columns: 360px minmax(0, 1fr); } }
     @media (max-width: 1100px) {
       .architecture-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 64px 28px; }
@@ -249,7 +262,7 @@
   <div class="shell">
     <header class="masthead">
       <div>
-        <p class="eyebrow">Demonstração técnica · passo a passo</p>
+        <p class="eyebrow">Padrão de arquitetura · implementação de referência</p>
         <h1>Dos bytes de origem à leitura no Azure</h1>
         <p class="subtitle">Inspecione o arquivo, acompanhe o transporte e reconcilie os dados. Cada clique executa somente uma etapa; as evidências vêm do backend.</p>
       </div>
@@ -258,12 +271,12 @@
         <span id="cloud-badge" class="badge cloud" hidden>Azure · configuração autenticada</span>
       </div>
     </header>
-    <p class="notice"><strong>Simulador de origem (não é z/OS).</strong> Arquivo de registros fixos, com EBCDIC cp037 e COMP-3; não é um data set VSAM indexado. A demonstração representa o fluxo de offload, não uma conexão com um mainframe.</p>
+    <p class="notice"><strong>Origem sintética (não é z/OS).</strong> Arquivo de registros fixos, com EBCDIC cp037 e COMP-3; não é um data set VSAM indexado. A implementação exercita o padrão de offload, sem conexão com um mainframe.</p>
     <div id="status" class="status-line" role="status" aria-live="polite" aria-atomic="true">Verificando a sessão…</div>
     <div id="error" class="error" role="alert" hidden></div>
 
     <section id="login" class="card auth" aria-labelledby="login-title" hidden>
-      <p class="eyebrow">Acesso à demonstração</p>
+      <p class="eyebrow">Acesso ao ambiente de referência</p>
       <h2 id="login-title">Entre para consultar o ambiente</h2>
       <p class="muted">A configuração e os nomes dos recursos só são carregados após a autenticação.</p>
       <form id="login-form">
@@ -289,6 +302,31 @@
       <details id="architecture" class="card architecture" open hidden>
         <summary id="architecture-summary"><h2>Arquitetura Azure</h2> <span class="small muted">· plano de dados e controle</span></summary>
         <p class="small muted">Recursos da configuração autenticada, não uma confirmação de conectividade. Selecione um nó para inspecionar a etapa; nenhuma operação é executada pelo diagrama.</p>
+        <section id="mainframe-capture-proposal" class="mainframe-proposal" aria-labelledby="mainframe-capture-title">
+          <span class="badge proposal-badge">Proposta — captura Mainframe não implementada</span>
+          <h3 id="mainframe-capture-title">Mainframe · captura sugerida por logs</h3>
+          <p class="small">Objetivo: capturar abaixo das aplicações para reduzir mudanças nos programas de negócio, desde que todos os writers tenham cobertura comprovada. Configuração e testes de recuperação continuam necessários.</p>
+          <div class="mainframe-inputs">
+            <article>
+              <h4>Online → CICS File Control → VSAM</h4>
+              <p>Saldos e lançamentos. Replication logging com LOGREPLICATE e arquivos recuperáveis; interpretar imagens, UOW, commit e backout. Batch que já escreve por CICS segue a UOW efetiva desse serviço.</p>
+            </article>
+            <article>
+              <h4>Batch direto → VSAM</h4>
+              <p>Adaptador de logging compatível: avaliar CICS VR e DFSMStvs/RRS conforme modo, suporte e licenciamento. O log CICS não captura automaticamente essas gravações. RC=0 do job não prova commit.</p>
+            </article>
+          </div>
+          <p class="mainframe-join">Caminhos qualificados ↓ <strong>z/OS System Logger · logstreams da origem</strong><br>Leitura autorizada; formatos e fronteiras de recuperação devem ser validados por versão e writer.</p>
+          <ol class="mainframe-stages" aria-label="Componentes propostos dentro do Mainframe">
+            <li><span class="stage-index">M1 →</span><h4>Leitor independente</h4><p>Wrapper de System Logger + adaptadores CICS/batch. Preservar cursor, geração, chave e imagem bruta; sem escrever nos datasets de negócio.</p></li>
+            <li><span class="stage-index">M2 →</span><h4>Montador UOW/UOR</h4><p>Reunir partes, interpretar commit/backout e provar ordem por entidade. Batch sem fronteira comprovada permanece pendente; timeout não confirma transação.</p></li>
+            <li><span class="stage-index">M3 →</span><h4>Spool e estado duráveis</h4><p>Persistir eventos, UOWs abertas e posição recuperável. Separar cursor de leitura e confirmação de publicação; não saltar lacunas nem limpar histórico necessário.</p></li>
+            <li><span class="stage-index">M4 →</span><h4>Publicador desacoplado</h4><p>Envio fora de locks de negócio, eventId estável e retry. ACK local somente após aceite durável do transporte; não significa aplicação no Cosmos.</p></li>
+          </ol>
+          <p class="small"><strong>Saldo + extrato:</strong> saldo absoluto e lançamentos com identidade própria, correções e estornos. Não derivar extrato da diferença entre saldos. O exemplo executável atual cobre apenas saldo sintético.</p>
+          <p class="mainframe-exit"><strong>Integração futura → Azure Event Hubs.</strong> Este bloco não é executado pelos botões do painel. Sem logging/fronteira batch qualificados, não há promessa de captura completa nem de evitar todas as mudanças.</p>
+        </section>
+        <p class="eyebrow">Fluxo executado no Azure · a fonte atual continua simulada</p>
         <div id="architecture-host" class="architecture-host"></div>
         <ol id="architecture-flow" class="architecture-flow" aria-label="Arquitetura do fluxo em seis etapas"></ol>
         <p class="notice small"><strong>Preview não é o payload publicado.</strong> O parser lê o landing para gerar JSON de inspeção. O publicador na mesma aplicação envia envelopes com registros brutos; o SyncEngine faz parsing novamente na aplicação.</p>
@@ -300,7 +338,7 @@
               <li>Ramificação das etapas → Azure Blob Storage, contêiner de controle: manifesto da execução, lease de exclusão mútua e checkpoint.</li>
               <li>Aplicação durável no Cosmos DB → só então checkpoint. Entrega <em>at-least-once</em> com idempotência por <code>accountId</code> e versão.</li>
               <li><code>sourceVersion</code> ordena a origem; <code>previousVersion</code> valida o estado anterior. O ETag do Cosmos DB protege a escrita concorrente; não é a versão da origem nem o offset do Event Hubs.</li>
-              <li>O consumidor é acionado pelo clique na etapa 05. Não há loop automático de consumo nesta demonstração.</li>
+              <li>O consumidor é acionado pelo comando da etapa 05. Não há loop automático de consumo neste modo interativo.</li>
             </ul>
           </aside>
           <aside aria-labelledby="architecture-network-title">
@@ -322,7 +360,7 @@
         </div>
       </details>
       <div class="workspace">
-        <aside class="controls" aria-label="Controles da apresentação">
+        <aside class="controls" aria-label="Controles de execução">
           <section class="card">
             <p id="step-kicker" class="eyebrow">Etapa 01 / 06</p>
             <h2 id="control-title">Preparar a origem</h2>
@@ -331,7 +369,7 @@
             <div class="row"><span id="step-status" class="badge">Não executado</span><span id="duration" class="small muted"></span></div>
             <button id="execute" class="primary full" type="button" disabled>Executar etapa</button>
             <p id="execute-help" class="small muted"></p>
-            <p class="small muted"><strong>Pausa manual entre etapas.</strong> O tempo da apresentação não representa a latência de atualização dos dados.</p>
+            <p class="small muted"><strong>Pausa manual entre etapas.</strong> O tempo da execução interativa não representa a latência de uma replicação contínua.</p>
             <button id="change" class="full" type="button" hidden>Iniciar fase de alteração</button>
             <p id="change-help" class="small muted" hidden style="margin: 12px 0 0">Avança a fase e reinicia as etapas. A nova origem só é gerada quando você executa a primeira etapa.</p>
           </section>
@@ -416,7 +454,7 @@
         </section>
       </div>
       <footer class="footnote">
-        <p><strong>Limite de atraso na atualização dos dados</strong> · Não é medido pelas pausas manuais desta apresentação. Durações exibidas são as reportadas pelo backend, não uma garantia de serviço.</p>
+        <p><strong>Limite de atraso na atualização dos dados</strong> · Não é medido pelas pausas manuais deste modo interativo. Durações exibidas são as reportadas pelo backend, não uma garantia de serviço.</p>
         <p>O serviço de computação identificado na configuração executa a orquestração e o parsing; Azure Blob Storage recebe o arquivo; Azure Event Hubs transporta os eventos; Azure Cosmos DB aplica e disponibiliza os dados para leitura.</p>
         <ul id="limitations"></ul>
       </footer>
@@ -449,7 +487,7 @@
       ];
       const TAB_IDS = ["bytes", "fields", "json", "services"];
       const ARCHITECTURE = [
-        { title: "Origem simulada", service: "origin", resource: "ACA compartilhada + arquivo de origem no Blob",
+        { title: "Origem simulada", service: "origin", resource: "Azure Container Apps · mesmo aplicativo + origem no Blob",
           operation: "Simulador na mesma aplicação; não é VSAM nativo nem conexão com z/OS.",
           format: "Saída: EBCDIC cp037 / COMP-3 · registros fixos de 51 bytes.", edge: "51 bytes/registro" },
         { title: "Landing binário", service: "storage", resource: "Azure Blob Storage",
@@ -459,12 +497,12 @@
           operation: "Parser lê o landing e interpreta o copybook; JSON apenas para preview.",
           format: "Entrada: bytes + layout. Saída: preview JSON; bruto preservado.", edge: "envelope bruto" },
         { title: "Transporte de mudanças", service: "eventhubs", resource: "Azure Event Hubs",
-          operation: "Publicador na ACA envia envelopes brutos, não o JSON do preview.",
+          operation: "Publicador no mesmo aplicativo envia envelopes brutos, não o JSON do preview.",
           format: "Entrada / saída: registro bruto + chave e versão; partição por accountId.", edge: "accountId/versão" },
-        { title: "Aplicação versionada", service: "cosmos", resource: "ACA compartilhada → Azure Cosmos DB",
+        { title: "Aplicação versionada", service: "cosmos", resource: "Mesmo aplicativo → Azure Cosmos DB",
           operation: "Consumidor / SyncEngine: novo parsing, validação de sourceVersion/previousVersion; escrita condicional por ETag.",
           format: "Entrada: envelope bruto. Saída: documento em /accountId.", edge: "point reads" },
-        { title: "Consulta e reconciliação", service: "cosmos", resource: "Azure Cosmos DB → ACA compartilhada",
+        { title: "Consulta e reconciliação", service: "cosmos", resource: "Azure Cosmos DB → mesmo aplicativo",
           operation: "API faz point reads por id + accountId e reconcilia o destino com a origem.",
           format: "Entrada: chave da conta. Saída: documento + divergências." }
       ];

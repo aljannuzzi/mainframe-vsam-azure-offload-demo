@@ -1,0 +1,75 @@
+{
+  "reviewDate": "2026-09-23",
+  "scope": "Código com licença open source para CDC de VSAM em z/OS, cobrindo CICS online e batch direto, commit/backout, cursores duráveis e retomada, sem instrumentar todos os writers.",
+  "conclusion": "Nenhuma solução open source pronta com esse conjunto de capacidades foi verificada nesta pesquisa. Isso não prova inexistência de outros projetos.",
+  "method": {
+    "searches": ["VSAM CDC", "VSAM change data capture", "VSAM replication", "VSAM CDC in:readme is:public", "LOGREPLICATE", "DFHFCLGD", "IXGBRWSE VSAM"],
+    "sources": "Busca de repositórios/código no GitHub, README dos projetos, licença reportada pela API do GitHub e documentação primária dos componentes.",
+    "qualification": ["Código de captura de alterações, não apenas leitura de arquivo", "Licença verificável", "Cobertura online e batch", "Commit/backout e recuperação", "Cursores/retomada e identidade de eventos"],
+    "limitations": "Busca indexada não é exaustiva. Nenhum candidato foi compilado ou homologado em z/OS. Data de push não comprova qualidade ou suporte."
+  },
+  "projects": [
+    {
+      "name": "Cobrix",
+      "url": "https://github.com/AbsaOSS/cobrix",
+      "license": "Apache-2.0",
+      "lastPushObserved": "2026-09-17",
+      "role": "Leitura/transformação de arquivos COBOL/EBCDIC e copybooks, com integração Spark.",
+      "gap": "Não foi verificado leitor de replication logs CICS/VSAM com cobertura de commit/backout e batch. Streaming de arquivos não equivale a CDC transacional.",
+      "qualifiedAsVsamCdc": false
+    },
+    {
+      "name": "JRecord",
+      "url": "https://github.com/bmTas/JRecord",
+      "license": "LGPL-3.0",
+      "lastPushObserved": "2026-01-30",
+      "role": "Biblioteca Java para leitura/escrita de arquivos COBOL, binários e formatos de registro.",
+      "gap": "Parser/I-O, não um capturador de alterações confirmadas do VSAM. Conferir termos da licença antes de incorporação.",
+      "qualifiedAsVsamCdc": false
+    },
+    {
+      "name": "Kafka Connect source connector for IBM MQ",
+      "url": "https://github.com/ibm-messaging/kafka-connect-mq-source",
+      "license": "Apache-2.0",
+      "lastPushObserved": "2026-07-22",
+      "role": "Transporte de mensagens que já estão no IBM MQ para Apache Kafka.",
+      "gap": "Não cria mudanças VSAM nem elimina captura/outbox na origem. Requer IBM MQ; garantias específicas Kafka não devem ser estendidas automaticamente ao Azure Event Hubs.",
+      "qualifiedAsVsamCdc": false
+    },
+    {
+      "name": "Debezium Connector for Db2",
+      "url": "https://github.com/debezium/debezium-connector-db2",
+      "license": "Apache-2.0",
+      "lastPushObserved": "2026-09-22",
+      "role": "CDC de Db2. README diferencia implementação LUW de z/OS.",
+      "gap": "Não é conector de VSAM. Na data da revisão, o README classifica a implementação Db2 z/OS como incubating e não recomendada para produção.",
+      "qualifiedAsVsamCdc": false
+    },
+    {
+      "name": "Mainframe Data Ingress & Egress Patterns",
+      "url": "https://github.com/chandu85/mainframe-data-ingress-egress-patterns",
+      "license": "Apache-2.0",
+      "role": "Padrões de integração CICS/batch, Kafka, REST e arquivos.",
+      "gap": "O README declara padrões iniciais em andamento e implementações parciais; não foi verificado motor CDC VSAM com as garantias exigidas.",
+      "qualifiedAsVsamCdc": false
+    },
+    {
+      "name": "cdc_setup",
+      "url": "https://github.com/zeditor01/cdc_setup",
+      "license": null,
+      "role": "Receitas e exemplos de implantação de IBM InfoSphere CDC.",
+      "gap": "Documentação pública de um produto não constitui implementação open source do motor de captura. Licença de reuso do repositório não verificada.",
+      "qualifiedAsVsamCdc": false
+    },
+    {
+      "name": "CBTTape/CBT898",
+      "url": "https://github.com/CBTTape/CBT898",
+      "license": null,
+      "role": "Coleção de materiais de programação de sistemas, incluindo ocorrências de DFHFCLGD.",
+      "gap": "Encontrar DSECTs/formatos não comprova um capturador completo nem licença para redistribuí-los. Nenhum material foi incorporado.",
+      "qualifiedAsVsamCdc": false
+    }
+  ],
+  "recommendation": "Usar componentes open source onde sua função é comprovada (parsing ou transporte), sem declarar resolvida a lacuna de captura VSAM. Qualificar produto de CDC ou desenvolver os componentes da especificação mainframe-capture.json; logging nativo IBM não é um motor open source completo.",
+  "notPerformed": ["Homologação z/OS", "Teste de desempenho", "Certificação de cobertura CICS/batch", "Auditoria jurídica de licenças/dependências"]
+}

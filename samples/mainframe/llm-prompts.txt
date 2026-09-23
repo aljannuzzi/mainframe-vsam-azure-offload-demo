@@ -1,0 +1,77 @@
+PROMPTS DE ENGENHARIA — CAPTURA VSAM POR LOGS
+Status: exemplos de instruções; não geram aprovação nem evidência z/OS.
+Base normativa: specs/mainframe-capture.json, versão 1.0.
+As 20 decisões D001–D020 estão abertas. Não presumir instalação/ABI/licença.
+
+PROTOCOLO COMUM A TODOS OS PROMPTS
+Use somente documentação e dados autorizados, com fixtures sintéticas.
+Solicite justificativas técnicas resumidas, decisões, alternativas e fontes
+verificáveis; não solicite cadeia interna de pensamento.
+Para cada afirmação, indique: documentada / decisão de projeto / pendente.
+Uma dependência não decidida gera BLOCKED, com pergunta e responsável.
+Não invente APIs, parâmetros IBM, layouts, offsets, RC/reason ou resultados.
+Não modifique as aplicações de negócio nem execute comandos no ambiente real.
+Separe código de projeto, wrapper de plataforma e componentes não implementados.
+Mapeie entregáveis para CAP-IDs, AT-IDs e decisões D-IDs da especificação.
+Apresente risco residual, evidências exigidas e lacunas; não declare homologação.
+
+PROMPT 1 — FECHAR ESPECIFICAÇÃO E ESTIMAR
+Atue como arquiteto z/OS/CICS e responsável por recuperação.
+Receba versões de plataforma, matriz writer/dataset, logging, modos batch,
+semântica UOW/UOR, disponibilidade de CICS VR/DFSMStvs/RRS e metas aprovadas.
+Revise CAP-001–CAP-032, I001–I004, máquinas de estados e D001–D020.
+Entregue matriz de cobertura, decisões bloqueantes, contrato de cada módulo,
+dependências, faixa de esforço de construção/homologação e plano de testes.
+Não transforme falta de informação em suposição silenciosa. Gate ADAPTER_CODE
+aberto impede implementação dependente de ABI/formatos; permite apenas desenho.
+
+PROMPT 2 — WRAPPER DE LEITURA E NÚCLEO COBOL
+Implemente somente [I001 Reader / I002 Normalizer / I003 StateStore] da versão
+aprovada [SPEC_VERSION], decisões fechadas [D-IDs], requisitos [CAP-IDs].
+Entradas: documentação IBM exata, mapa de campos/status aprovado, ambiente
+LE/AMODE/RMODE, opções do compilador/link-edit, linguagem do wrapper e tecnologia
+transacional do estado. Se qualquer entrada necessária faltar: BLOCKED.
+Não escreva CALL COBOL de macros IXGCONN/IXGBRWSE. Defina o wrapper apropriado
+e documente parâmetros, comprimentos, ownership/release de buffers e códigos.
+Preserve bytes; valide limites, fragmentação, geração, chave e CCSID.
+O mesmo commit durável deve registrar dedup, estado UOW, elegibilidade de spool
+e posição recuperável, com fencing do leitor. Duas WRITE não provam atomicidade.
+COMMIT_OBSERVED aguarda completude; BACKOUT_OBSERVED absorve partes anteriores
+atrasadas antes de DISCARDED. In-doubt não expira para commit. Undo parcial
+exige algoritmo qualificado; sem ele, bloqueie o caminho antes da produção.
+Entregue fontes originais/copybooks de projeto, interfaces, tabela de erros,
+build para o ambiente informado e casos AT-003–AT-012/AT-017–AT-019 pertinentes.
+Não reproduza copybooks IBM proprietários no repositório público.
+
+PROMPT 3 — PUBLICADOR E CONTROLE DE REPRESAMENTO
+Implemente I004 com decisões D009/D011/D012/D014 aprovadas.
+Defina claim/renew/ack com lease e fencing persistentes; rede fora de lock
+de negócio. Somente evento de manifest READY completo pode ser enviado.
+Preserve o envelope em retries; diferencie aceite durável do broker de ACK
+persistido e de aplicação no Cosmos. Resultado ambíguo mantém evento recuperável.
+Prefixo publicado não pode saltar lacunas. Rejeite ACK com fence obsoleto.
+Especifique backpressure, retenção, tentativas, alerta e recuperação sem inventar
+valores ainda null. GC respeita todos os leitores e UOWs pendentes.
+Entregue testes AT-013–AT-019, traces A005/A006/A007 e justificativas curtas.
+Não prometa exactly-once entre mainframe e Event Hubs nem commit por RC=0 batch.
+
+PROMPT 4 — REVISOR ADVERSARIAL E HOMOLOGAÇÃO
+Revise independentemente a implementação e o contrato aprovados.
+Procure perda após crash entre leitura/persistência/cursor e entre envio/ACK;
+mistura de UOW entre regiões/gerações; commit antes de partes atrasadas;
+backout completo antes de dados anteriores; undo parcial interpretado errado;
+limpeza precoce de log/spool; publicação de batch sem fronteira comprovada;
+ordem inferida de timestamp entre streams; ACK obsoleto após lease expirado;
+saldo novo sobrescrito por evento antigo; extrato derivado de delta de saldo;
+epoch retirada reaplicada após rebaseline; vazamento de dados em logs.
+Para cada achado, forneça requisito, condição reproduzível, impacto e correção.
+Use oráculo independente e proponha injeção de falhas, sem alegar executá-la.
+Vincule testes AT-001–AT-026 a evidências A001–A012 e papéis R001–R007.
+Entregue critérios de passagem, riscos residuais e itens que bloqueiam cutover.
+
+SAÍDA PADRÃO
+Estado: BLOCKED / READY_FOR_REVIEW / READY_FOR_AUTHORIZED_TEST.
+Nunca usar PRODUCTION_READY com decisões/evidências obrigatórias pendentes.
+Resumo de decisões; requisitos/interfaces cobertos; fontes/versões; código
+ou pseudocódigo explicitamente identificado; testes planejados/executados
+separados; referências às evidências reais; limitações e responsáveis.

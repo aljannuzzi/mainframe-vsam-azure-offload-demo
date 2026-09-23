@@ -1,0 +1,39 @@
+      *> DESIGN EXAMPLE - NOT COMPILED OR PRODUCTION READY.
+      *> Project-operation pseudocode; missing backend/SDK is intentional.
+      *> Mapping: I004 Publisher; CAP-012..CAP-017.
+      *> Tests: AT-013, AT-015..AT-019.
+      *> CLAIM/ACK are short atomic backend operations.
+      *> Network I/O must run outside business-record locks.
+
+       PUBLISH-ONE-EVENT.
+           PERFORM CLAIM-READY-EVENT-WITH-FENCING
+           EVALUATE TRUE
+               WHEN NO-ELIGIBLE-EVENT
+                   PERFORM WAIT-WITHOUT-ADVANCING-PREFIX
+               WHEN CLAIM-VALID
+                   PERFORM SEND-FROZEN-ENVELOPE
+                   EVALUATE TRUE
+                       WHEN BROKER-DURABLE-ACCEPT
+                           PERFORM ACK-WITH-CURRENT-LEASE-AND-FENCE
+                           IF NOT ACK-DURABLE
+                               PERFORM KEEP-FOR-RECOVERY
+                           END-IF
+                       WHEN SEND-AMBIGUOUS
+                           PERFORM KEEP-FOR-RECOVERY
+                       WHEN OTHER
+                           PERFORM RECORD-ERROR-AND-SCHEDULE-RETRY
+                   END-EVALUATE
+               WHEN OTHER
+                   PERFORM STOP-AND-REPORT
+           END-EVALUATE.
+
+      *> SEND uses the exact eventId, bytes and version stored in spool.
+      *> A reconnect/retry must not create a new business event identity.
+      *> Broker acceptance does not mean Cosmos application.
+      *> ACK validates lease expiry/fence inside the same backend commit
+      *> that records acknowledgement and advances only resolved prefix.
+      *> Old worker ACK after a new claim -> STALE_FENCE; no state mutation.
+      *> ACK 101 and 103, with 102 pending -> contiguous prefix remains 101.
+      *> These numbers are local ledger examples, not IBM log positions.
+      *> Lost ACK after successful SEND can duplicate delivery by design.
+      *> Do not purge acknowledged spool before approved retention/replay.

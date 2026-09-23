@@ -1,0 +1,96 @@
+REVISÃO DE CAPTURA MAINFRAME — rascunho público, UTF-8
+
+Arquivo normativo: specs/mainframe-capture.json (schemaVersion 1.0).
+Status: DRAFT_FOR_MAINFRAME_REVIEW; implemented=false.
+Proposta: saldo + extrato. Implementação de referência: dados sintéticos no Azure,
+somente saldo. Aprovar o documento NÃO certifica captura z/OS nem os exemplos.
+
+COMO REVISAR
+1. Dataset owner e batch owner completam writer-matrix.csv (A001): todo writer,
+   organização VSAM, geração, share options, modo de acesso e logging.
+   Writer omitido bloqueia entidade; exclusão precisa declarar seu impacto.
+2. z/OS system programmer e CICS recovery revisam adapter-mapping.csv (A003):
+   release/documento/seção, campo/status, prova de offset/comprimento, regra
+   de commit/undo. FLJB/DFHFCLGD é DSECT IBM, não copybook de negócio.
+   IXGCONN/IXGBRWSE exigem wrapper programático; não CALL COBOL de macros.
+3. Security revisa A002: leitura autorizada, escrita original negada, operador
+   separado, TLS/auth e allowlist. Worker nunca atualiza datasets de negócio.
+   Logging só muda com aprovação operacional e ensaio de impacto.
+4. SRE revisa I003/I004: transação/WAL, spill, readerFence, lease e ack durável.
+   Não aceitar duas WRITE independentes como atomicidade.
+5. Dataset owner + Azure architect revisam saldo absoluto, entryId de extrato,
+   correção/estorno/delete, ordem por entidade e política de visibilidade.
+   Não derivar extrato de delta de saldo; não inventar sequence_number real.
+6. Revisores fecham decisões D001–D020 com evidência/data/aprovador.
+   Todas estão OPEN, required=true, sem valor implícito. Versões em URLs IBM
+   são referências, não versões instaladas aprovadas. Licenças desconhecidas.
+7. Executar AT-001–AT-026 somente após autorização dos gates pertinentes.
+   Atualmente todos NOT_EXECUTED_ZOS. CAP-001–CAP-032 têm vínculo bidirecional
+   para testes; uma referência válida não equivale a evidência técnica.
+8. Registrar decisão do gate em A008 com hashes das evidências, desvios SHOULD,
+   risco residual e papéis assinantes. Exigir todos os sete papéis em produção.
+
+TABELAS E TRACES (templates no JSON; estes arquivos NÃO foram gerados)
+A001 writer-matrix.csv         Cobertura completa writer/dataset/geração.
+A002 access-review.json        Privilégios, separação, TLS e redação.
+A003 adapter-mapping.csv       Versão/ABI/status/campo -> significado normalizado.
+A004 source-trace.jsonl        Raw digest/posição -> UOW/tipo/op/ordinal/oráculo.
+A005 durability-trace.jsonl    Fault/commit/fence -> UOW/spool/resume/GC.
+A006 delivery-trace.jsonl      EventId/digest -> lease/receipt/ack/prefixo/aplicação.
+A007 fault-observations.csv    Injeção -> erro/estado/alerta/resultado de replay.
+A008 gate-review.json          CAP/AT/decisões -> provas/aprovação/desvios.
+A009 snapshot-manifest.json    W0: dados, gerações, vetor de posições e transações.
+A010 reconciliation.csv        Oráculo independente -> observado por janela/entidade.
+A011 nfr-measurements.csv      Unidade/limiar/carga/baseline -> observado/regressão.
+A012 component-estimate.csv    Componente/dependências -> esforço/faixa/risco.
+
+Como seguir uma linha: AT -> requirementIds -> CAP -> acceptanceIds -> AT.
+Depois AT -> artifactIds -> Axxx; juntar traces por runId/testId, posição/UOW,
+eventId e hashes. Confirmar bytes/ordinais na origem, commit no ledger durável,
+receipt + ack separado e aplicação/reconciliação downstream. Não usar saída
+do capturador como seu próprio oráculo. Registrar runId e hashes no gate.
+Traces reais só em ambiente autorizado; repo público recebe dados sintéticos.
+Before images/raw logs não são publicáveis por padrão, mesmo se usados no undo.
+
+PONTOS QUE REPROVAM O DESENHO
+- LOGREPLICATE anunciado como captura de todo batch ou sem regressão/mudanças.
+- Batch via CICS tratado fora da UOW CICS; RLS confundido com DFSMStvs/RRS.
+- Batch não recuperável liberado por RC=0 ou fim de job: manter
+  WAIT_VALIDATED_BOUNDARY/EXCLUDE. Reload não coberto exige EXPLICIT_REBASELINE.
+- COMMIT observado sem completude; in-doubt resolvido por timeout;
+  rollback parcial confundido com backout completo.
+- BACKOUT terminalizado antes de receber partes anteriores de streams atrasados:
+  manter BACKOUT_OBSERVED, absorver essas partes sem publicar e concluir
+  DISCARDED somente após comprovar completude. AT-007 inclui esse restart.
+- Cursor avançado sem UOW integral durável ou pin de log necessário.
+- ACK 101 e 103 com 102 pendente anunciado como prefixo 103: correto é 101.
+  São índices locais ilustrativos, não campos/LSN IBM.
+- GC pelo maior publicado, sem leitores/subscriptions externos e UOW longa.
+- Expiração de cursor resolvida por latest; epoch/generation misturados.
+  Rebaseline exige ativação durável no destino e rejeição de mensagens antigas
+  já no broker, inclusive corrida entre aplicação e troca de epoch.
+- Ordem global inferida de bytes base64, timestamps ou chegada entre streams.
+- Exactly-once de transporte; fence antigo aceito; publish sob lock de negócio.
+- Snapshot com timestamp W0 sem prova de pausa integral ou protocolo de join.
+- Atomicidade Cosmos presumida entre containers/partições.
+
+EXECUÇÃO E ESTIMATIVA
+Fases: discovery -> um KSDS online -> batch -> snapshot -> reconciliação paralela
+-> canário de leitura reversível. Nunca migrar autoridade de escrita aqui.
+Estimar separadamente os dez componentes listados em delivery, com dependências,
+faixas de esforço de construção e teste, especialistas e riscos; números ainda
+não aprovados. Entregar racional curto e evidências, não pensamento interno.
+LLM deve parar geração de adapter executável com gate ADAPTER_CODE aberto;
+é permitido preparar documentos/templates e exemplos não executáveis.
+
+Janela controlada W0/W1: todos os writers/UOW enumerados e desfechos resolvidos,
+drain aprovado e oráculo independente. Alvos: zero confirmados perdidos, zero
+abortados aplicados, zero sobrescritas antigas. HELD não conta como aprovação.
+NFR de produção permanecem null: taxa, p99, backlog/disco/retenção, RPO/RTO e
+regressão precisam de carga, unidade, limiar e assinatura, não promessa comercial.
+
+VALIDAÇÃO LOCAL (na raiz do repo, Windows ou Linux)
+python -m pytest -q tests/test_capture_spec.py
+Valida JSON, IDs, referências, vínculos, estados/gates e limites não aprovados.
+NÃO executa IBM APIs, prova atomicidade real, mede NFR ou certifica mainframe.
+Referências IBM-01–IBM-05 estão em sources; revisão da versão exata é obrigatória.

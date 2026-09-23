@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mainframe-vsam-azure-offload-demo"
 version = "0.3.0"
-description = "Demo for near-real-time offload of VSAM-like mainframe records to Azure Cosmos DB."
+description = "Reference pattern for recoverable offload of VSAM-like records to Azure Cosmos DB."
 requires-python = ">=3.11"
 dependencies = [
     "azure-cosmos>=4.7.0",

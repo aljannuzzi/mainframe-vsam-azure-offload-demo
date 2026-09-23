@@ -1,0 +1,45 @@
+      *> DESIGN EXAMPLE - NOT COMPILED OR PRODUCTION READY.
+      *> Project-internal buffer, NOT IBM FLJB/DFHFCLGD or an ABI.
+      *> Capacities below are illustrative, NOT approved production limits.
+      *> D002/D004/D010 must define widths, encodings and buffer ownership.
+      *> Never silently truncate a field to fit this example.
+       01 CAPTURE-EVENT.
+          05 CE-CONTRACT-VERSION         PIC 9(4).
+          05 CE-KIND                     PIC X(8).
+             88 CE-CHANGE               VALUE 'CHANGE'.
+             88 CE-COMMIT                VALUE 'COMMIT'.
+             88 CE-BACKOUT               VALUE 'BACKOUT'.
+             88 CE-BARRIER               VALUE 'BARRIER'.
+          05 CE-SOURCE-ID                PIC X(64).
+          05 CE-SOURCE-EPOCH             PIC X(64).
+          05 CE-LOGSTREAM-ID             PIC X(64).
+          05 CE-CURSOR-LENGTH            PIC 9(5) COMP-5.
+          05 CE-CURSOR-BYTES             PIC X(256).
+          05 CE-RECORD-IDENTITY          PIC X(256).
+          05 CE-UOW-IDENTITY             PIC X(256).
+          05 CE-DATASET-ID               PIC X(64).
+          05 CE-DATASET-GENERATION       PIC X(64).
+          05 CE-ENTITY                   PIC X(9).
+             88 CE-BALANCE               VALUE 'BALANCE'.
+             88 CE-STATEMENT             VALUE 'STATEMENT'.
+          05 CE-OPERATION                PIC X(6).
+             88 CE-INSERT                VALUE 'INSERT'.
+             88 CE-UPDATE                VALUE 'UPDATE'.
+             88 CE-DELETE                VALUE 'DELETE'.
+          05 CE-KEY-LENGTH               PIC 9(5) COMP-5.
+          05 CE-KEY-BYTES                PIC X(256).
+          05 CE-LAYOUT-ID                PIC X(64).
+          05 CE-CCSID                    PIC 9(5) COMP-5.
+          05 CE-AFTER-LENGTH             PIC 9(9) COMP-5.
+          05 CE-AFTER-BYTES              PIC X(32768).
+          05 CE-UNDO-SCOPE               PIC X(7).
+             88 CE-FULL-UNDO             VALUE 'FULL'.
+             88 CE-PARTIAL-UNDO          VALUE 'PARTIAL'.
+          05 CE-EVIDENCE-REFERENCE       PIC X(256).
+      *> Identity fields above reference normalized, length-checked values.
+      *> The complete production contract also carries before images/undo
+      *> targets, region incarnation, recovery context and fragments.
+      *> See contracts.normalizedRecord in specs/mainframe-capture.json.
+      *> DELETE has no after image. Do not infer a statement from balances.
+      *> Compute eventId from proven stable source record identity; freeze
+      *> it and its envelope. Do not regenerate an ID from CURRENT-DATE.

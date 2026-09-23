@@ -1,0 +1,55 @@
+{
+  "status": "SPECIFICATION_ONLY_NOT_EXECUTED_ZOS",
+  "normativeSpec": "../../specs/mainframe-capture.json",
+  "purpose": "Roteiros pequenos para discutir os padrões; não substituem os 26 aceites normativos.",
+  "cases": [
+    {
+      "id": "EX-001",
+      "acceptanceIds": ["AT-007", "AT-012"],
+      "steps": ["CHANGE U1", "COMMIT U1", "completude comprovada", "reiniciar leitor", "reentregar o mesmo registro"],
+      "expected": "Uma identidade lógica publicada; replay idempotente; estado/cursor recuperáveis."
+    },
+    {
+      "id": "EX-002",
+      "acceptanceIds": ["AT-007"],
+      "steps": ["FULL_BACKOUT U2", "CHANGE anterior de U2 chega por outro stream", "reiniciar", "completude comprovada"],
+      "expected": "BACKOUT_OBSERVED até completar; depois DISCARDED; zero publicação e nenhum falso conflito pela chegada anterior tardia."
+    },
+    {
+      "id": "EX-003",
+      "acceptanceIds": ["AT-009"],
+      "steps": ["CHANGE A e B", "PARTIAL_BACKOUT de B", "CHANGE C", "COMMIT e completude"],
+      "expected": "Publicar somente A/C se undo parcial estiver qualificado; caso contrário bloquear o caminho."
+    },
+    {
+      "id": "EX-004",
+      "acceptanceIds": ["AT-010", "AT-011"],
+      "steps": ["ler CHANGE", "falhar ao persistir estado/spool/cursor", "reiniciar"],
+      "expected": "Recuperar tudo antes ou tudo depois do commit atômico; nunca cursor adiantado sem dados."
+    },
+    {
+      "id": "EX-005",
+      "acceptanceIds": ["AT-013", "AT-015"],
+      "steps": ["reservar evento", "broker aceita", "ACK local falha", "lease expira", "novo worker repete", "ACK antigo chega"],
+      "expected": "Mesmo eventId/corpo; duplicata de transporte permitida; ACK antigo rejeitado."
+    },
+    {
+      "id": "EX-006",
+      "acceptanceIds": ["AT-016", "AT-017"],
+      "steps": ["ACK 101", "102 pendente", "ACK 103", "solicitar limpeza"],
+      "expected": "Prefixo permanece 101; GC não elimina histórico ainda necessário a pendências ou outros leitores."
+    },
+    {
+      "id": "EX-007",
+      "acceptanceIds": ["AT-018", "AT-022"],
+      "steps": ["batch convencional grava imagens", "job retorna RC=0 sem prova de fronteira", "cursor expira"],
+      "expected": "Nenhum commit presumido; bloqueio/recuperação ou rebaseline aprovado, nunca seguir de latest."
+    },
+    {
+      "id": "EX-008",
+      "acceptanceIds": ["AT-021", "AT-026"],
+      "steps": ["dois lançamentos compensados sem variação líquida de saldo", "atrasar um lançamento no destino"],
+      "expected": "Preservar ambos entryIds e política de visibilidade; reconciliação não se limita ao saldo final."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+      *> DESIGN EXAMPLE - NOT COMPILED OR PRODUCTION READY.
+      *> Project policy pseudocode, not a CICS/DFSMStvs implementation.
+      *> Mapping: W001..W005; CAP-001/CAP-008/CAP-009/CAP-026.
+      *> Tests: AT-001, AT-007..AT-009, AT-022..AT-024.
+
+       EVALUATE-PUBLICATION-BOUNDARY.
+           EVALUATE TRUE
+               WHEN WRITER-UNMAPPED
+                   PERFORM BLOCK-AFFECTED-ENTITY
+               WHEN BATCH-WRITES-THROUGH-CICS
+                   PERFORM REQUIRE-PROVEN-CICS-UOW-OUTCOME
+               WHEN DIRECT-TVS-RRS-PATH-QUALIFIED
+                   PERFORM REQUIRE-PROVEN-UOR-OUTCOME
+               WHEN DIRECT-NONRECOVERABLE-BATCH
+                   PERFORM REQUIRE-APPROVED-EXTERNAL-BOUNDARY
+                   IF NOT BOUNDARY-PROVEN
+                       PERFORM PERSIST-HELD-AND-ALERT
+                   END-IF
+               WHEN OTHER
+                   PERFORM BLOCK-AFFECTED-ENTITY
+           END-EVALUATE.
+
+      *> This routine returns evidence/eligibility to the StateStore;
+      *> it never publishes nor advances resume by itself.
+      *> Job RC=0, EOF, CLOSE or an elapsed timeout is NOT commit proof.
+      *> CICS replication logging does not automatically cover direct
+      *> batch writes. CICS VR and DFSMStvs/RRS have different conditions.
+      *> RLS alone is not transaction recovery.
+      *> A validated batch window may have greater latency than online.
+      *> An unsupported writer blocks the entity, not just that writer.

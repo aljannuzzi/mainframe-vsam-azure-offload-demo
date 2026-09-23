@@ -1,2 +1,1 @@
-"""VSAM offload demo package."""
-
+"""Reference implementation of the VSAM offload pattern."""

@@ -1,4 +1,4 @@
-# Guia técnico: como controlar o sincronismo VSAM
+# Guia de implementação: captura e sincronismo VSAM para Azure
 
 ## 1. Comece pela fronteira de responsabilidade
 
@@ -12,7 +12,7 @@ leitura e controla processamento, recuperação e qualidade.
 
 | Passo | Responsável | Entrada -> saída | Evidência a mostrar |
 | --- | --- | --- | --- |
-| 1. Capturar | Produto/agente CDC compatível com z/OS | Mudanças confirmadas -> registro + chave + operação + cursor | Na POC real: log/cursor do produto e transação de origem |
+| 1. Capturar | Produto/agente CDC compatível com z/OS | Mudanças confirmadas -> registro + chave + operação + cursor | Na homologação: log/cursor do produto e transação de origem |
 | 2. Transportar | Adaptador de captura + Event Hubs | Evento durável -> partição ordenada por chave | Mesmo `accountId` como partition key |
 | 3. Validar | Consumer Azure | Envelope -> contrato aceito ou quarentena | Schema, época, chave, timestamp e formato verificados |
 | 4. Decodificar | Parser Azure | Registro EBCDIC/COMP-3 + copybook -> campos | Registro binário de 51 bytes e JSON |
@@ -26,7 +26,7 @@ leitura e controla processamento, recuperação e qualidade.
 entregar bytes brutos e metadados; o copybook funciona como contrato do parser
 no Azure. Se o produto já entrega campos decodificados, o parser customizado
 pode ser dispensado. O conector real precisa de um adaptador para o contrato
-desta demo: nenhum formato de saída de fornecedor é presumido.
+desta implementação de referência: nenhum formato de saída de fornecedor é presumido.
 
 ## 2. Precisa desenvolver do lado do mainframe?
 
@@ -56,7 +56,7 @@ datasets), não apenas anunciar "suporte a VSAM".
 | 2. Validar o suporte | Obter do fornecedor a configuração de captura suportada para as versões específicas do produto, do z/OS e dos componentes envolvidos | Cobertura documentada de insert/update/delete, commit/rollback e restart para cada caminho de escrita |
 | 3. Preparar a operação | Instalar/configurar o agente e os componentes do produto com a equipe z/OS; dimensionar logging, permissões RACF, retenção, capacidade e rede | Procedimento aprovado de instalação, recuperação e monitoramento; não alterar a configuração de recovery às cegas |
 | 4. Coordenar a carga inicial | Obter um snapshot consistente vinculado a um cursor de captura e reter as mudanças enquanto a baseline é carregada | Corte inicial rastreável e continuidade entre snapshot e CDC, sem janela de perda |
-| 5. Transportar o envelope | Preservar chave, operação, cursor da origem, `eventId` estável e ordem; incluir bytes brutos se o produto os oferecer e adaptar seu contrato de saída ao desta demo; publicar no Event Hubs por um publisher distribuído, quando aplicável | Contrato validado do fornecedor, cursor preservado e identidade/ordem mantidas na retomada e na reentrega |
+| 5. Transportar o envelope | Preservar chave, operação, cursor da origem, `eventId` estável e ordem; incluir bytes brutos se o produto os oferecer e adaptar seu contrato de saída ao da implementação de referência; publicar no Event Hubs por um publisher distribuído, quando aplicável | Contrato validado do fornecedor, cursor preservado e identidade/ordem mantidas na retomada e na reentrega |
 
 Na origem, mantenha apenas **captura e transporte**; deixe parsing, transformação,
 deduplicação, quarentena, replay, reconciliação e APIs no Azure. O pacote CDC pode
@@ -67,17 +67,19 @@ trabalho operacional e consumo de CPU.
 
 CICS e batch devem ser validados separadamente. Habilitar `LOG(ALL)` não cria um
 CDC universal; os mecanismos e as referências IBM abaixo ajudam a identificar as
-distinções, não substituem as instruções do fornecedor. Não construa um leitor
-genérico artesanal de logs nem use polling como substituto de CDC transacional.
+distinções, não substituem as instruções do fornecedor. Não trate um leitor de
+logs sem recuperação como CDC, nem use polling como substituto de captura
+transacional. A opção de desenvolvimento abaixo exige um motor de captura
+completo, com escopo de formatos e caminhos explicitamente suportados.
 Também evite dual-write ingênuo: gravar VSAM e depois enviar uma mensagem pode
 deixar os dois lados divergentes se ocorrer falha entre as operações.
 
-Comece a POC com **um VSAM de saldos representativo e todos os seus writers**.
+Comece a validação com **um VSAM de saldos representativo e todos os seus writers**.
 O aceite deve comprovar captura de alterações confirmadas, rollback sem estado
 definitivo indevido, delete, escrita batch, interrupção e retomada sem perda,
 além de reconciliação no mesmo corte. Meça CPU/MSU antes e depois, incluindo o
-custo da captura; não há garantia prévia de economia. Esta demo não implementa
-CDC nativo de VSAM: essa integração precisa ser comprovada na POC.
+custo da captura; não há garantia prévia de economia. A implementação de referência
+não inclui CDC nativo de VSAM: essa integração precisa ser homologada.
 
 z/OS Connect expõe serviços; não deve ser desenhado como um capturador universal
 de alterações VSAM. ADF copia dados/arquivos, não cria o histórico de mudanças
@@ -122,6 +124,186 @@ com o fornecedor antes de vender a solução como plug-and-play.
 7. Qual é o limite de atraso aceitável na atualização dos dados por operação? Que consultas podem usar estado defasado?
 8. Como produzir uma baseline consistente sem interromper a operação?
 9. Qual é o consumo atual de CPU/MSU por consulta e quanto custa capturar e reconciliar?
+
+<a id="captura-customizada"></a>
+
+### Opção: desenvolver captura abaixo das aplicações
+
+**Objetivo:** reduzir a necessidade de modificar cada programa que atualiza saldo
+ou extrato, usando logging na infraestrutura e um capturador independente.
+Essa opção não é uma outbox gravada pela aplicação. Também não é um CDC universal
+embutido no VSAM: é um projeto de infraestrutura z/OS a ser implementado e operado.
+O [bloco Mainframe do README](../README.md#captura-mainframe-por-logs) mostra os
+componentes propostos; a implementação Azure continua consumindo uma origem simulada.
+O contrato normativo está em [specs/mainframe-capture.json](../specs/mainframe-capture.json);
+o [checklist de revisão](../specs/mainframe-capture-review.txt) explica os gates,
+os responsáveis e a ligação entre requisitos, aceites e evidências.
+
+#### Cobertura online e batch antes de desenvolver
+
+| Origem das gravações | Mecanismo a avaliar | Fronteira que autoriza publicar |
+| --- | --- | --- |
+| CICS com arquivos recuperáveis | Replication logging, atributos de recovery e LOGSTREAMID compatíveis | Commit da UOW; backout descarta a alteração, pendência não é sucesso |
+| Batch cuja escrita já ocorre por serviço CICS | O mesmo caminho CICS para as operações efetivamente executadas nele | A UOW do serviço; verificar gravações externas e tamanho das unidades |
+| Batch direto com acesso transacional | DFSMStvs/RRS e logging de replicação compatível com a versão/configuração | Unidade de recuperação coordenada; RLS sozinho não fornece commit/backout |
+| Batch direto convencional | CICS VR/logging batch quando disponível e suportado | Regra de conclusão e recuperação comprovada para aquele workload; não supor commit por registro |
+| Writer ou utilitário sem logging compatível | Resolver a cobertura ou coordenar extração/rebaseline | Bloquear cutover desse fluxo; não declarar captura completa |
+
+As opções CICS VR e DFSMStvs/RRS **não são intercambiáveis nem dependências
+automaticamente disponíveis**. Conferir licenciamento, habilitação, RLS/non-RLS,
+organização do dataset, linguagem/runtime e limitações. A ativação de logging
+não transforma um batch convencional em aplicação transacional.
+
+Se a confirmação de negócio só puder ser estabelecida ao fim de uma janela,
+a publicação segura desse batch poderá ter latência maior que a do online.
+Uma política que publique imagens intermediárias é outro contrato, que exige
+aceite explícito e não deve ser apresentado como espelho de dados confirmados.
+Encaminhar batch por CICS é alternativa, mas pode exigir mudanças de integração:
+não faz parte da promessa de "nenhuma alteração".
+
+#### Componentes a desenvolver no Mainframe
+
+| Módulo | Responsabilidade | Estado durável |
+| --- | --- | --- |
+| Leitores/adaptadores | Consumir logstreams autorizados e interpretar os formatos CICS e batch escolhidos | Identidade/geração do stream e posição de leitura recuperável |
+| Montador UOW/UOR | Associar imagens à unidade de trabalho, interpretar commit/backout, conservar pendências | Mudanças ainda não confirmadas e fronteiras já resolvidas |
+| Normalizador técnico | Identificar dataset, chave, operação, transação, layout/CCSID e imagem do registro | Identidade estável e ordenação por entidade conforme contrato |
+| Spool de saída | Reter alterações liberadas para publicação, sem perder dados em indisponibilidade Azure | Conteúdo imutável, estado de entrega e referência à origem |
+| Publicador | Enviar envelopes ou micro-lotes; repetir com a mesma identidade após resultado ambíguo | Confirmação durável de publicação por evento/lote e stream |
+| Supervisor | Detectar atraso, pendências antigas, falta de espaço, logs indisponíveis e mudanças de geração | Alarmes, estado de recuperação e bloqueios para operação |
+
+Uma implementação pode usar uma started task ou serviço equivalente no z/OS,
+com módulos na linguagem apropriada às interfaces suportadas. As macros de
+System Logger, como `IXGCONN`/`IXGBRWSE`, exigem integração de programação de
+sistemas e autorização de leitura. Não são chamadas diretas ao Azure nem uma
+biblioteca COBOL de CDC pronta.
+
+A IBM documenta o FLJB e o DSECT `DFHFCLGD` para registros de File Control.
+**Esse layout não é o copybook de saldo:** primeiro se interpreta o registro de
+log e sua semântica transacional; depois se extrai a imagem bruta de negócio.
+O parser Azure recebe essa imagem, não deve interpretar o log CICS inteiro.
+Formatos suportados, tie-ups, registros de fechamento e evolução de versão
+devem fazer parte do contrato e dos testes do leitor.
+
+O armazenamento do spool/estado pode ser MQ persistente, datasets recuperáveis
+ou outro mecanismo durável aprovado pela equipe z/OS. A escolha não dispensa
+coordenação entre dados e checkpoints. Não inventar um protocolo de commit
+entre dois arquivos não recuperáveis.
+
+#### Algoritmo conceitual de leitura e publicação
+
+```text
+abrir logstream a partir da posição recuperável
+para cada registro:
+    identificar stream/geração, tipo de registro e unidade de recuperação
+    persistir a mudança ou a decisão de commit/backout no estado de captura
+    se a unidade estiver confirmada:
+        tornar suas mudanças elegíveis no spool de saída
+    se houver backout:
+        bloquear publicação e persistir BACKOUT_OBSERVED
+        absorver partes anteriores ainda ausentes, sem efeitos de negócio
+        concluir DISCARDED somente após comprovar completude da captura
+    se a confirmação não puder ser interpretada:
+        reter pendência e sinalizar; não presumir commit
+    avançar a posição de leitura somente com recuperação demonstrável
+
+publicador independente:
+    reservar mudança elegível respeitando a ordem por entidade
+    publicar e aguardar confirmação durável do transporte
+    persistir confirmação de publicação
+    em resultado ambíguo, repetir com o mesmo eventId
+```
+
+O algoritmo é **pseudocódigo de desenho, não uma implementação incluída no repo**.
+Uma falha entre persistência e checkpoint precisa ser recuperável por replay
+idempotente. Não manter locks de registros de negócio durante chamadas de rede.
+Também não usar exits ou hooks de baixo nível como atalho para ignorar commit:
+interceptar um WRITE concluído não prova confirmação da transação.
+
+#### Watermarks e represamento
+
+O capturador mantém pelo menos dois controles separados, **por logstream/geração**:
+
+| Controle | Quando avança | O que não significa |
+| --- | --- | --- |
+| Posição de leitura recuperável | Depois de persistir estado suficiente para recuperar inclusive UOWs abertas, ou preservando o log necessário para relê-las | Não significa publicação nem aplicação no Cosmos |
+| Confirmação de publicação | Depois do aceite durável do transporte e da persistência local desse aceite | Não significa que todos os consumers aplicaram a mudança |
+| Checkpoint do consumer Azure | Depois de escrita/aplicação resolvida duravelmente, conforme a política de erro | Não substitui os controles da origem |
+| Corte de reconciliação | Depois de comparar os estados no mesmo corte definido | Não pode ser inferido apenas do maior offset |
+
+O menor cursor ainda necessário por uma transação aberta/replay limita a limpeza
+dos logs. O spool só pode ser limpo conforme a política de entrega e recuperação,
+não porque o leitor já avançou. Se lotes 101 e 103 foram publicados, mas 102 não,
+registrar os resultados individuais e manter o watermark contínuo antes da lacuna.
+**Confirmar e apagar antes do envio durável causaria perda.**
+
+Uma indisponibilidade Azure represa o spool; o leitor só pode continuar enquanto
+há capacidade e retenção seguras. Dimensionar taxa de mudanças × tamanho dos
+eventos × janela de recuperação, monitorar capacidade e definir backpressure.
+Se a retenção expirar, sinalizar lacuna e executar recuperação/rebaseline;
+nenhum checkpoint recria dados descartados.
+
+#### Contrato de saldo e extrato
+
+Saldo é uma imagem absoluta por conta, com ordenação que impeça regressão.
+Extrato requer **lançamentos identificáveis**, inclusive correções, estornos,
+exclusões e ordem de negócio. Diferenças entre saldos não reconstituem o extrato.
+
+O envelope de produção deve incluir origem/geração, dataset e chave, operação,
+posição original, identidade estável do evento, transação/UOR, layout/CCSID e
+imagem bruta pertinente. A ordem precisa ser derivada de semântica comprovada
+da origem. Dois logstreams não possuem automaticamente um contador global;
+concatenar seus timestamps não resolve escritores concorrentes.
+
+Os campos `sourceVersion` e `previousVersion` do exemplo são um contrato sintético.
+Um adaptador real deve fornecer uma ordem por entidade estável e recuperável
+ou adaptar os controles downstream explicitamente. **Não é necessário adicionar
+o campo `SEQUENCE-NUMBER` do exemplo aos copybooks de negócio** apenas para
+aproveitar o padrão arquitetural. O exemplo não é um adaptador pronto para os logs
+reais, e o seu parser de 51 bytes não representa todo saldo/extrato de produção.
+
+Se uma mesma transação alterar saldo e lançamento, preservar essa relação.
+Visibilidade atômica no Cosmos só é possível dentro dos limites do modelo
+transacional escolhido; várias contas/partições podem exigir outra estratégia
+de materialização. O caminho executável atual não implementa extrato nem
+transação distribuída CICS + Event Hubs + Cosmos.
+
+#### Estratégia de implementação e critérios de passagem
+
+1. **Discovery e contrato:** inventariar datasets/writers, recovery/logging,
+   SLAs de atraso, semântica batch e licenças. Não avançar sem plano para cada writer.
+2. **Validação online restrita:** um KSDS recuperável; leitor autorizado, montagem UOW,
+   spool e replay. Exercitar insert/update/delete, rollback, abend e restart.
+3. **Cobertura batch:** adicionar o adaptador para o modo efetivamente usado;
+   testar erro/restart do job e confirmar que não são publicados estados indevidos.
+   Validar ordem e integridade com acessos online/batch coordenados.
+4. **Carga inicial:** obter snapshot consistente associado a um corte W0,
+   retendo mudanças necessárias. Na primeira prova, uma pausa coordenada de
+   writers pode simplificar o corte; snapshot concorrente exige protocolo específico.
+5. **Operação paralela:** sem desviar consultas, comparar saldo e lançamentos em
+   cortes consistentes; medir CPU/MSU, I/O, atraso, backlog e retenção. Simular
+   indisponibilidade do Azure, replay e falha após envio antes da confirmação local.
+6. **Cutover gradual:** liberar somente consultas elegíveis, com política para
+   dados atrasados e retorno controlado ao sistema de registro. Ensaiar
+   reorganização, reload/restauração, troca de geração e evolução de copybook.
+
+Não é necessário testar alterações de fonte em cada programa quando não houve
+alteração de fonte, mas continua necessário testar **todos os caminhos de
+escrita cobertos**, concorrência, recuperação e impacto na plataforma.
+A mudança centralizada pode afetar muitas aplicações; isso não é ausência de risco.
+
+#### Referências primárias para essa opção
+
+- [CICS replication logging](https://www.ibm.com/docs/en/cics-ts/6.x?topic=processing-replication-logging): logging produzido pelo CICS e consumido por mecanismo externo.
+- [FLJB / DFHFCLGD](https://www.ibm.com/docs/api/v1/content/SSJL4D_6.x/system-programming/cics/dfha31m.html?lang=en): formato de File Control, incluindo commit/backout para replicação.
+- [Autorização de aplicações System Logger](https://www.ibm.com/docs/en/zos/2.3.0?topic=stream-requesting-authorization-log-application): acesso ao logstream; conferir documentação correspondente à versão instalada.
+- [CICS VR batch logging](https://www.ibm.com/docs/en/cvrfz/6.3.0?topic=logging-enabling-cics-vr-vsam-batch): opções e restrições próprias de batch.
+- [DFSMStvs](https://www.ibm.com/docs/en/zos/3.1.0?topic=environment-dfsmstvs-overview): recuperação transacional acrescentada ao VSAM RLS.
+- [UORs em replicação VSAM](https://www.ibm.com/docs/api/v1/content/SSTRGZ_11.4.0/com.ibm.cdcdoc.classiccdcforzos.doc/concepts/vsamcdcuors.html?lang=en): diferença entre fontes recuperáveis e agrupamentos não recuperáveis.
+
+Essas referências sustentam os blocos e as restrições do desenho; não constituem
+uma certificação IBM de um motor customizado. O desenvolvimento e sua manutenção
+precisam de responsáveis especializados em z/OS/CICS e recuperação.
 
 ## 3. Quatro posições diferentes, nunca uma única "sequence"
 
@@ -177,9 +359,9 @@ de perda. Um `REPRO` de arquivo sendo atualizado não deve ser anunciado como
 snapshot transacional consistente sem coordenação. Cópia de arquivos binários
 por SFTP/ADF também não cria essa garantia.
 
-Na demo, as primeiras versões são uma **baseline sintética** conhecida. Não há
+No exemplo executável, as primeiras versões são uma **baseline sintética** conhecida. Não há
 handshake com CICS, snapshot z/OS nem ponte real de logs W0/W1 implementada.
-O roteiro prova controles de aplicação; a POC com o fornecedor deve provar
+O ensaio exercita controles de aplicação; a homologação da solução deve comprovar
 captura e cutover.
 
 ## 5. Contrato bruto e transformação no Azure
@@ -233,7 +415,7 @@ A imagem de saldo é absoluta, **não um delta para somar novamente** no retry.
 | CURRENT-BALANCE | 16 | 8 | S9(13)V99 COMP-3 |
 | AVAILABLE-LIMIT | 24 | 8 | S9(13)V99 COMP-3 |
 | LAST-TXN-DATE | 32 | 8 | 9(8), YYYYMMDD de amostra |
-| SEQUENCE-NUMBER | 40 | 10 | Campo artificial para a demo; não um cursor VSAM universal |
+| SEQUENCE-NUMBER | 40 | 10 | Campo artificial do exemplo; não um cursor VSAM universal |
 | STATUS | 50 | 1 | PIC X(1) |
 
 O parser é pequeno e intencionalmente restrito: rejeitar um layout não suportado é
@@ -270,7 +452,7 @@ Se outro consumidor alterar o documento, reler e reavaliar; não repetir um
 upsert cego. Reentrega é esperada: **at-least-once com aplicação idempotente**,
 não transação distribuída exactly-once entre Event Hubs e Cosmos.
 
-### Três trechos de código para a apresentação
+### Padrões de código para roteamento, escrita e confirmação
 
 Roteamento em [eventhub_publisher.py](../src/vsam_offload/eventhub_publisher.py):
 
@@ -342,7 +524,7 @@ não de uma conversão silenciosa.
 Tombstones devem sobreviver ao horizonte de replay/captura. Apagá-los cedo
 permite que uma after-image antiga ressuscite uma conta excluída.
 
-## 7. Roteiro da demonstração local
+## 7. Executar os cenários de recuperação localmente
 
 ```powershell
 python -m vsam_offload.sync_demo --output .\out\sync-01 --interval-seconds 0.2
@@ -353,7 +535,7 @@ Get-Content .\out\sync-01\events.jsonl -TotalCount 2
 Para repetir sem sobrescrever evidência:
 `python -m vsam_offload.sync_demo --output .\out\sync-runs --new-run`.
 
-| Cenário | O que explicar | O que deve acontecer |
+| Cenário | Condição exercitada | Resultado esperado |
 | --- | --- | --- |
 | Baseline sintética | Representa corte inicial, não coleta VSAM real | Estado inicial conhecido |
 | Atualização | After-image de uma conta já existente | Saldo/versão avançam juntos |
@@ -365,7 +547,7 @@ Para repetir sem sobrescrever evidência:
 | Delete e evento antigo | Exclusão precisa de memória da versão | Tombstone impede ressurreição |
 | Evento omitido | Um pipeline ativo pode estar incompleto | Reconciliação aponta diferença; replay corrige |
 
-O intervalo configurado é apenas o ritmo de apresentação. O tempo medido localmente
+O intervalo configurado é uma pausa entre operações do ensaio. O tempo medido localmente
 não inclui captura, rede, Event Hubs ou Cosmos reais. Não anunciar SLA a partir dele.
 Eventos inválidos propositalmente preservados na quarentena continuam sendo pendências,
 mesmo quando o estado final esperado dos saldos foi reconciliado.
@@ -406,7 +588,7 @@ Na execução Azure, o JSONL não injeta automaticamente falhas no Cosmos nem ma
 o processo. O consumer processa os eventos de fato; reproduzir queda exige um
 ensaio operacional controlado. O replay de gap é executado, mas o fechamento
 da quarentena no Cosmos é uma ação operacional ainda não automatizada
-(`resolve_quarantine` nesta demo existe apenas no store SQLite).
+(`resolve_quarantine` nesta implementação existe apenas no store SQLite).
 
 ## 8. Rodar o consumer real no Azure
 
@@ -417,8 +599,8 @@ Ele mantém a origem **simulada**, mas usa os serviços reais do Azure para
 transferência, transporte e persistência. A tela apresenta os nomes dos recursos
 e links para o Azure Portal, além dos resultados retornados por cada operação.
 
-Use o card **Arquitetura Azure** para iniciar a apresentação ao time de
-arquitetura. Ele relaciona os serviços às etapas e separa fluxo de dados,
+Use o card **Arquitetura Azure** para consultar a topologia e as responsabilidades
+dos componentes. Ele relaciona os serviços às etapas e separa fluxo de dados,
 controle de sincronismo e rede/identidade. As caixas de parsing, publicação e
 consumo são funções do mesmo host de computação, não recursos separados.
 Os registros decodificados são uma prévia: o Event Hubs transporta envelopes
@@ -438,11 +620,11 @@ Container App e lê o arquivo de landing, não uma tabela de valores pronta no
 navegador. A aplicação deve receber mensagens do Event Hubs e a conferência deve
 reler o Cosmos; sucesso visual não substitui essas operações.
 
-Os checkpoints desse roteiro são associados à execução e à partição. Essa leitura
-controlada permite as pausas da apresentação e não deve ser confundida com um
+Os checkpoints do modo interativo são associados à execução e à partição. Essa leitura
+controlada permite pausas entre operações e não deve ser confundida com um
 grupo de consumidores contínuos com balanceamento de partições de produção.
 Não execute um consumer contínuo em paralelo sobre os mesmos eventos durante
-o roteiro, pois ele pode gravar no Cosmos antes do botão de aplicação.
+a execução interativa, pois ele pode gravar no Cosmos antes do comando de aplicação.
 
 O template guiado inclui rede privada e identidade; o template básico e o modo
 CLI abaixo continuam disponíveis para o estudo independente de cada componente.
@@ -453,8 +635,9 @@ O código inclui adaptadores reais para Event Hubs, BlobCheckpointStore e Cosmos
 mas **o template básico só provisiona recursos de dados**. O processo pode rodar
 em um host autorizado ou ser hospedado posteriormente em Container Apps/Functions.
 O novo template guiado acrescenta hospedagem Container Apps e Log Analytics.
-Escalabilidade, SLOs e operação de produção continuam fora do escopo da demo.
-O fluxo de ponta a ponta em um ambiente Azure real ainda não foi verificado.
+Escalabilidade, SLOs e operação de produção continuam fora do escopo da
+implementação de referência. Cada nova instalação deve verificar o fluxo
+ponta a ponta em seu próprio ambiente, independentemente dos ensaios anteriores.
 
 ### Pré-requisitos
 
@@ -500,8 +683,8 @@ python -m vsam_offload.eventhub_publisher --events .\out\sync-01\events.jsonl `
 ```
 
 O hub da primeira versão pode conter eventos no contrato antigo. O consumer novo
-não os transforma silenciosamente: vão para quarentena. Para uma apresentação
-limpa, use recursos/grupo de consumo dedicados conforme o procedimento aprovado,
+não os transforma silenciosamente: vão para quarentena. Para isolar os ensaios,
+use recursos/grupo de consumo dedicados conforme o procedimento aprovado,
 sem apagar dados/checkpoints existentes.
 
 Uma nova execução sintética reutiliza contas/versões, mas gera novos timestamps.
@@ -522,7 +705,7 @@ python -m uvicorn vsam_offload.api:app --host 127.0.0.1 --port 8000
 Invoke-RestMethod http://127.0.0.1:8000/accounts/000000100002/balance
 ```
 
-A API da demo lê o documento e não publica um serviço bancário seguro.
+A API de referência lê o documento e não constitui um serviço bancário pronto para produção.
 Não é uma API autenticada de produção, nem implementa autorização por conta
 ou política completa de atraso máximo na atualização dos dados. Não a exponha publicamente.
 Erro de infraestrutura não deve ser mascarado como conta inexistente.
@@ -531,16 +714,16 @@ com posição da origem, eventId e horários de commit/aplicação. Os horários
 só ajudam a medir o atraso na atualização com relógios sincronizados e captura saudável;
 não substituem heartbeat, backlog nem controle de pendências.
 
-## 9. Como demonstrar viabilidade sem prometer o que não foi provado
+## 9. Critérios de validação e adoção do padrão
 
-| Nível | Evidência | Não demonstra |
+| Nível | Evidência necessária | Limite da evidência |
 | --- | --- | --- |
 | Simulador local | Parsing, regras de versão, retomada e cenários de falha persistidos | Captura VSAM, latência Azure, redução de CPU |
 | Azure com fonte sintética | Producer -> consumer -> Cosmos -> checkpoint -> leitura e reconciliação | Captura transacional real e overhead z/OS |
-| POC com VSAM real | Produto CDC cobrindo CICS/batch, baseline/CDC sem lacunas, rollback/delete/restart | Escala de produção sem carga representativa |
+| Homologação com VSAM real | Motor CDC cobrindo CICS/batch, baseline/CDC sem lacunas, rollback/delete/restart | Escala de produção sem carga representativa |
 | Ensaio de carga/cutover | Throughput, p95/p99, backpressure, reconciliação e CPU/MSU medidos | Garantia permanente sem SLO/operação |
 
-O aceite da POC deve incluir:
+O aceite da implementação deve incluir:
 
 1. Aplicar uma transação na origem e rastrear cursor, eventId, partição,
    documento, versão e horário no destino.
@@ -564,7 +747,7 @@ a ausência de mensagens pode significar "sem mudanças" OU "captura parada".
 
 ## 10. E o extrato?
 
-O executável desta demo cobre um registro de saldo por conta. Um extrato requer
+O exemplo executável cobre um registro de saldo por conta. Um extrato requer
 eventos de lançamentos com identidade imutável, correções/estornos e ordenação
 de negócio. Nunca deduzir extrato a partir das diferenças entre saldos.
 
@@ -579,7 +762,7 @@ antes de apresentar o espelho como substituto de qualquer consulta transacional.
 
 | Fonte | O que sustenta | O que não se deve inferir |
 | --- | --- | --- |
-| [Microsoft / Precisely Connect](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/mainframe/mainframe-replication-precisely-connect) | Arquitetura de CDC/replicação de mainframe para Event Hubs e processamento Azure | Não é case público desta implementação nem garantia de suporte a qualquer VSAM |
+| [Microsoft / Precisely Connect](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/mainframe/mainframe-replication-precisely-connect) | Arquitetura de CDC/replicação de mainframe para Event Hubs e processamento Azure | Não homologa esta implementação nem garante suporte a qualquer VSAM |
 | [Modernize mainframe data](https://learn.microsoft.com/en-us/azure/architecture/example-scenario/mainframe/modernize-mainframe-data-to-azure) | Caminhos de modernização, EBCDIC e copybooks | Não prova captura transacional de todos os writers |
 | [IBM Host File](https://learn.microsoft.com/en-us/azure/connectors/integrate-host-files-ibm-mainframe) | Parsing/geração de arquivos por metadados HIDX | Não descobre sozinho cada alteração do dataset |
 | [ADF Binary](https://learn.microsoft.com/en-us/azure/data-factory/format-binary) | Transporte binário sem parsing | Não decodifica COMP-3 nem cria CDC |
@@ -590,5 +773,5 @@ antes de apresentar o espelho como substituto de qualquer consulta transacional.
 | [IBM CICS VR batch logging](https://www.ibm.com/docs/en/cvrfz/6.3.0?topic=logging-enabling-cics-vr-vsam-batch) | Requisitos e restrições do logging batch IBM | Não comprova compatibilidade de um produto CDC específico |
 
 Documentação de arquitetura e de produto sustenta a escolha de abordagem.
-Não há neste repositório um case de cliente comprovando exatamente
-"VSAM -> este parser -> Cosmos" em produção.
+O repositório não fornece evidência de operação produtiva de
+"VSAM -> este parser -> Cosmos"; essa adoção exige homologação no ambiente alvo.

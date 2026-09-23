@@ -1,0 +1,416 @@
+{
+  "schemaVersion": "1.0",
+  "status": "DRAFT_FOR_MAINFRAME_REVIEW",
+  "implemented": false,
+  "language": "pt-BR",
+  "intendedScope": "balances_statement_capture_proposal",
+  "actualRepoImplementation": "synthetic_Azure_balances_only",
+  "title": "Proposta revisável de captura de alterações VSAM: saldo e extrato",
+  "normativeLanguage": {
+    "MUST": "Obrigação verificável; ausência de evidência bloqueia o gate aplicável.",
+    "SHOULD": "Recomendação; desvio exige justificativa, risco residual e aprovação registrada.",
+    "null": "Desconhecido/não aprovado; nunca equivale a aprovação ou valor padrão.",
+    "references": "Campos terminados em Ids referenciam catálogos explícitos. acceptanceIds e requirementIds formam rastreabilidade bidirecional.",
+    "validationScope": "O pytest valida estrutura e vínculos deste documento, não ABI IBM, recuperação, desempenho ou execução em z/OS."
+  },
+  "approval": {
+    "status": "PENDING",
+    "approvedAt": null,
+    "approvedBy": null,
+    "requiredRoleIds": ["R001", "R002", "R003", "R004", "R005", "R006", "R007"],
+    "roles": [
+      {"id": "R001", "name": "z/OS system programmer", "responsibility": "Logger, ABI, plataforma e retenção."},
+      {"id": "R002", "name": "CICS recovery", "responsibility": "Recoverability, mapeamento de UOW, commit/backout e savepoints."},
+      {"id": "R003", "name": "batch owner", "responsibility": "Inventário de jobs/utilitários, restart e fronteiras de transação."},
+      {"id": "R004", "name": "dataset owner", "responsibility": "Layouts, identidade de saldo/extrato, writers e baseline."},
+      {"id": "R005", "name": "security", "responsibility": "Menor privilégio, TLS, identidade e proteção dos dados."},
+      {"id": "R006", "name": "SRE", "responsibility": "Estado durável, fencing, capacidade, incidentes e recuperação."},
+      {"id": "R007", "name": "Azure architect", "responsibility": "Transporte, consumidor, visibilidade e reconciliação."}
+    ]
+  },
+  "scope": {
+    "proposal": "Worker independente lê logs autorizados, reconstrói transações e publica mudanças confirmadas; não é uma implementação de captura nativa.",
+    "included": ["Saldo absoluto por entidade.", "Extrato com identidade imutável de lançamento, quando qualificado.", "CICS File Control recoverable; batch via CICS; estudo condicionado de batch direto."],
+    "nonGoals": ["Instrumentar todos os programas COBOL.", "Alterar datasets de negócio pelo worker.", "Implementar SQL, um programa COBOL completo ou offsets IBM presumidos.", "Garantir captura de qualquer batch por LOGREPLICATE.", "Prometer zero mudança operacional, zero regressão, exatamente uma entrega ou suporte a todo VSAM."],
+    "changeAuthority": "Somente operadores autorizados podem aprovar e aplicar configuração de logging, após avaliação de impacto; worker não executa essa configuração.",
+    "forbiddenMechanisms": ["EXCP patch", "hooks obrigatórios", "interceptação não documentada", "credenciais de escrita em datasets originais"],
+    "productionRule": "Cada writer, dataset, geração e caminho de recuperação MUST constar na matriz assinada antes de produção; writer desconhecido bloqueia a cobertura, não vira exclusão silenciosa.",
+    "requirementIds": ["CAP-001", "CAP-002", "CAP-003"]
+  },
+  "sources": [
+    {"id": "IBM-01", "title": "CICS replication logging", "url": "https://www.ibm.com/docs/en/cics-ts/6.x?topic=processing-replication-logging", "supports": "LOGREPLICATE no caminho CICS File Control; não cobertura universal de batch.", "versionApplicability": "Confirmar release instalado em D001.", "verifiedAt": null},
+    {"id": "IBM-02", "title": "FLJB / DFHFCLGD", "url": "https://www.ibm.com/docs/api/v1/content/SSJL4D_6.x/system-programming/cics/dfha31m.html?lang=en", "supports": "DSECT IBM de registros de log; não copybook de negócio.", "versionApplicability": "Confirmar formato, comprimento e status no release escolhido.", "verifiedAt": null},
+    {"id": "IBM-03", "title": "DFSMStvs overview", "url": "https://www.ibm.com/docs/en/zos/3.1.0?topic=environment-dfsmstvs-overview", "supports": "Transacionalidade condicionada a DFSMStvs/RRS; RLS sozinho não basta.", "versionApplicability": "3.1 é referência documental, não versão aprovada.", "verifiedAt": null},
+    {"id": "IBM-04", "title": "CICS VR VSAM batch logging", "url": "https://www.ibm.com/docs/en/cvrfz/6.3.0?topic=logging-enabling-cics-vr-vsam-batch", "supports": "Elegibilidade e modo do logging de batch precisam de qualificação.", "versionApplicability": "6.3 é referência; disponibilidade e licença desconhecidas.", "verifiedAt": null},
+    {"id": "IBM-05", "title": "VSAM CDC units of recovery", "url": "https://www.ibm.com/docs/api/v1/content/SSTRGZ_11.4.0/com.ibm.cdcdoc.classiccdcforzos.doc/concepts/vsamcdcuors.html?lang=en", "supports": "Referência conceitual para UOR; não prova que worker customizado herda garantias do produto.", "versionApplicability": "Sem presumir instalação/licença Classic CDC.", "verifiedAt": null}
+  ],
+  "capabilityMatrix": [
+    {"id": "W001", "writer": "CICS File Control recoverable", "classification": "supported_in_principle", "certified": false, "boundary": "UNDO/REDO e COMMIT/BACKOUT documentados do caminho recoverable com LOGREPLICATE; testar associação completa por UOW.", "disposition": "QUALIFY_BEFORE_ENABLE", "requirementIds": ["CAP-001", "CAP-004", "CAP-008"], "decisionIds": ["D001", "D003", "D004", "D007", "D008"], "sourceIds": ["IBM-01", "IBM-02"], "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "W002", "writer": "Batch que acessa dados por CICS", "classification": "supported_in_principle", "certified": false, "boundary": "Segue UOW CICS efetiva; fim do job não substitui syncpoint CICS.", "disposition": "QUALIFY_BEFORE_ENABLE", "requirementIds": ["CAP-001", "CAP-008", "CAP-026"], "decisionIds": ["D004", "D006", "D008"], "sourceIds": ["IBM-01"], "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "W003", "writer": "Batch direto DFSMStvs/RRS transacional", "classification": "conditional", "certified": false, "boundary": "Exige inscrição/enlistment, recuperação, formato e desfecho RRS comprovados; VSAM RLS isolado não implica transação.", "disposition": "WAIT_VALIDATED_BOUNDARY", "requirementIds": ["CAP-001", "CAP-008", "CAP-009", "CAP-026"], "decisionIds": ["D003", "D006", "D007", "D008"], "sourceIds": ["IBM-03"], "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "W004", "writer": "Batch direto não recuperável, inclusive modos CICS VR", "classification": "boundary_unproven", "certified": false, "boundary": "Pode não existir fronteira transacional suficiente. RC=0, close, fim de step ou timestamp não são commit. Contrato de fronteira externa validado ou exclusão explícita de toda entidade afetada.", "disposition": "WAIT_VALIDATED_BOUNDARY_OR_EXCLUDE", "requirementIds": ["CAP-001", "CAP-008", "CAP-026"], "decisionIds": ["D006", "D007", "D008", "D017"], "sourceIds": ["IBM-04", "IBM-05"], "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "W005", "writer": "Reload, restore, REPRO e outros utilitários", "classification": "not_covered_by_default", "certified": false, "boundary": "Mudança fora de cobertura exige parada, nova geração/epoch e baseline explícito, salvo prova aprovada de cobertura integral do utilitário.", "disposition": "EXPLICIT_REBASELINE", "requirementIds": ["CAP-001", "CAP-017", "CAP-018", "CAP-027"], "decisionIds": ["D006", "D017", "D020"], "sourceIds": [], "evidence": null, "approvedAt": null, "approvedBy": null}
+  ],
+  "requirements": [
+    {"id": "CAP-001", "level": "MUST", "text": "Inventariar e aprovar todos os writers por dataset/geração; writer não mapeado impede habilitação da entidade.", "acceptanceIds": ["AT-001"], "decisionIds": ["D003", "D006", "D007"], "risk": "Lacunas invisíveis de captura."},
+    {"id": "CAP-002", "level": "MUST", "text": "Negar escrita do worker nos datasets originais e permitir apenas leitura autorizada; SDK de publicação não pode alcançar caminho de escrita de negócio.", "acceptanceIds": ["AT-002"], "decisionIds": ["D005", "D015"], "risk": "Corrupção da origem."},
+    {"id": "CAP-003", "level": "MUST", "text": "Aplicar mudanças de logging somente por operador aprovado, com plano de reversão e medição de regressão.", "acceptanceIds": ["AT-002", "AT-025"], "decisionIds": ["D004", "D016"], "risk": "Impacto operacional não autorizado."},
+    {"id": "CAP-004", "level": "MUST", "text": "Qualificar cada combinação release/caminho com wrapper documentado IXGCONN/IXGBRWSE e adapter de formato, sem tratar macros como CALL COBOL.", "acceptanceIds": ["AT-003"], "decisionIds": ["D001", "D002", "D004"], "risk": "ABI ou decodificação inválida."},
+    {"id": "CAP-005", "level": "MUST", "text": "Preservar bytes verdadeiros, chave binária, comprimentos, CCSID e proveniência sem conversão destrutiva do registro original.", "acceptanceIds": ["AT-004"], "decisionIds": ["D003", "D013"], "risk": "Perda de precisão ou identidade."},
+    {"id": "CAP-006", "level": "MUST", "text": "Validar limites e invariantes antes de avançar estado; fragmento incompleto não pode ser interpretado como registro completo.", "acceptanceIds": ["AT-004", "AT-005"], "decisionIds": ["D002", "D004", "D010"], "risk": "Leitura fora de limites ou falso commit."},
+    {"id": "CAP-007", "level": "MUST", "text": "Distinguir UOW por origem, região/instância, epoch, contexto de recuperação e ocorrência de UOR, não apenas UOR reutilizável.", "acceptanceIds": ["AT-006"], "decisionIds": ["D008"], "risk": "Mistura entre transações."},
+    {"id": "CAP-008", "level": "MUST", "text": "Liberar somente mudanças sobreviventes de UOW completa com desfecho confirmado e mapeamento de commit auditável.", "acceptanceIds": ["AT-007", "AT-009", "AT-022"], "decisionIds": ["D006", "D008"], "risk": "Publicação de alterações abortadas ou parciais."},
+    {"id": "CAP-009", "level": "MUST", "text": "Manter in-doubt retido e qualificar undo parcial/savepoints; sem suporte, bloquear o caminho antes de produção.", "acceptanceIds": ["AT-008", "AT-009"], "decisionIds": ["D008"], "risk": "Timeout interpretado como commit."},
+    {"id": "CAP-010", "level": "MUST", "text": "Aplicar deduplicação de entrada, estado UOW, readiness do spool e cursor recuperável no mesmo commit durável.", "acceptanceIds": ["AT-010", "AT-011", "AT-012"], "decisionIds": ["D009"], "risk": "Cursor avançado sem dados recuperáveis."},
+    {"id": "CAP-011", "level": "MUST", "text": "Usar armazenamento durável limitado para UOW grande e backpressure antes de exaurir disco; não descartar partes.", "acceptanceIds": ["AT-019"], "decisionIds": ["D009", "D010", "D016"], "risk": "Perda em transação longa."},
+    {"id": "CAP-012", "level": "MUST", "text": "Gerar eventId determinístico da identidade estável de origem e congelar envelope; replay do mesmo ID com outro corpo é conflito.", "acceptanceIds": ["AT-012", "AT-013"], "decisionIds": ["D011", "D013"], "risk": "Duplicação lógica ou mutação no retry."},
+    {"id": "CAP-013", "level": "MUST", "text": "Provar ordem por entidade e predecessor; sem coordenação comprovada entre streams, bloquear writers concorrentes para a entidade.", "acceptanceIds": ["AT-014", "AT-023"], "decisionIds": ["D011"], "risk": "Saldo antigo sobrepondo saldo novo."},
+    {"id": "CAP-014", "level": "MUST", "text": "Publicar fora de locks de negócio; usar claim/renew/ack com token de fencing e ack durável no backend.", "acceptanceIds": ["AT-013", "AT-015"], "decisionIds": ["D009", "D014"], "risk": "Publicador obsoleto confirmar entrega alheia."},
+    {"id": "CAP-015", "level": "MUST", "text": "Separar leitura, resume recuperável, prefixo publicado, aplicação downstream e reconciliação; checkpoint não representa todos.", "acceptanceIds": ["AT-016", "AT-017"], "decisionIds": ["D009", "D012", "D014"], "risk": "GC prematuro e falsa consistência."},
+    {"id": "CAP-016", "level": "MUST", "text": "Limitar GC por todos os consumidores/leitores e UOW pendentes; purgar spool apenas após ack e retenção aprovada.", "acceptanceIds": ["AT-016", "AT-017", "AT-019"], "decisionIds": ["D010", "D012"], "risk": "Histórico necessário eliminado."},
+    {"id": "CAP-017", "level": "MUST", "text": "Tratar cursor expirado/inválido, lacuna ou epoch diferente como parada com recuperação aprovada, nunca seguir do mais recente.", "acceptanceIds": ["AT-018"], "decisionIds": ["D012", "D020"], "risk": "Continuidade falsa após perda."},
+    {"id": "CAP-018", "level": "MUST", "text": "Criar baseline consistente com fronteira W0 de dados e transações e retenção suficiente cobrindo todos os writers.", "acceptanceIds": ["AT-020"], "decisionIds": ["D017"], "risk": "Buraco entre snapshot e delta."},
+    {"id": "CAP-019", "level": "MUST", "text": "Publicar saldo como imagem absoluta qualificada e extrato apenas com identidade própria; não derivar lançamentos da diferença de saldos.", "acceptanceIds": ["AT-021"], "decisionIds": ["D013"], "risk": "Extrato financeiro inventado."},
+    {"id": "CAP-020", "level": "MUST", "text": "Qualificar correção, estorno, tombstone e deletes por organização VSAM; sem semântica comprovada bloquear a operação.", "acceptanceIds": ["AT-021", "AT-024"], "decisionIds": ["D003", "D013"], "risk": "Perda do histórico ou identidade ESDS incorreta."},
+    {"id": "CAP-021", "level": "MUST", "text": "Declarar política de visibilidade transacional por conta e limites de atomicidade do consumidor antes do cutover.", "acceptanceIds": ["AT-026"], "decisionIds": ["D018"], "risk": "Saldo visível sem extrato correspondente."},
+    {"id": "CAP-022", "level": "MUST", "text": "Classificar erros e falhar fechado com posição, causa e alerta redigidos, sem descartar silenciosamente registro inválido.", "acceptanceIds": ["AT-002", "AT-005", "AT-018", "AT-024"], "decisionIds": ["D004", "D015", "D020"], "risk": "Falha mascarada como sucesso."},
+    {"id": "CAP-023", "level": "MUST", "text": "Usar identidades de menor privilégio, TLS aprovado e redigir diagnósticos; amostras públicas somente sintéticas, sem imagens pessoais.", "acceptanceIds": ["AT-002", "AT-025"], "decisionIds": ["D005", "D015"], "risk": "Exposição de dados ou credenciais."},
+    {"id": "CAP-024", "level": "MUST", "text": "Provar em janela controlada zero confirmados perdidos, zero abortados aplicados e zero sobrescritas antigas, com oráculo independente.", "acceptanceIds": ["AT-007", "AT-014", "AT-025"], "decisionIds": ["D016", "D019"], "risk": "Validação sem base comparável."},
+    {"id": "CAP-025", "level": "MUST", "text": "Aprovar limiares NFR com unidade, carga, janela e capacidade; valores ausentes bloqueiam produção.", "acceptanceIds": ["AT-019", "AT-025"], "decisionIds": ["D010", "D016"], "risk": "SLO ou capacidade fabricados."},
+    {"id": "CAP-026", "level": "MUST", "text": "Testar abend/restart de cada modo batch; job RC=0 nunca substitui fronteira transacional validada.", "acceptanceIds": ["AT-022"], "decisionIds": ["D006", "D007", "D008"], "risk": "Batch parcialmente confirmado como completo."},
+    {"id": "CAP-027", "level": "MUST", "text": "Emitir barreira e exigir rebaseline explícito para reload/restore não coberto, preservando separação de gerações com ativação coordenada e rejeição durável de epochs retiradas no destino.", "acceptanceIds": ["AT-018", "AT-020"], "decisionIds": ["D017", "D018", "D020"], "risk": "Misturar registros anteriores e posteriores ao reload."},
+    {"id": "CAP-028", "level": "MUST", "text": "Bloquear geração de adapter executável enquanto ABI, formatos ou status obrigatórios estiverem sem decisão; não inventar offsets ou RC.", "acceptanceIds": ["AT-003"], "decisionIds": ["D001", "D002", "D004"], "risk": "Código compilável com semântica fictícia."},
+    {"id": "CAP-029", "level": "MUST", "text": "Registrar evidência, versão documental, responsável e decisão em todos os gates; aprovação do JSON não certifica mainframe.", "acceptanceIds": ["AT-001", "AT-003", "AT-025"], "decisionIds": ["D019"], "risk": "Aprovação sem auditoria."},
+    {"id": "CAP-030", "level": "MUST", "text": "Documentar incompatibilidades com sourceVersion/previousVersion do exemplo sem alterar bytes do copybook real para satisfazê-lo.", "acceptanceIds": ["AT-004", "AT-014"], "decisionIds": ["D011", "D013", "D018"], "risk": "Converter sequências sintéticas em garantias da origem."},
+    {"id": "CAP-031", "level": "SHOULD", "text": "Entregar racional curto, tabela de estimativa por componente e traces reproduzíveis antes de expandir escopo.", "acceptanceIds": ["AT-025"], "decisionIds": ["D019"], "risk": "Escopo e custo não revisáveis."},
+    {"id": "CAP-032", "level": "MUST", "text": "Executar fases com reconciliação paralela e canário de leitura reversível; fallback não muda writers nem torna Azure origem de escrita.", "acceptanceIds": ["AT-026"], "decisionIds": ["D018", "D020"], "risk": "Cutover irreversível ou dupla autoridade."}
+  ],
+  "contracts": {
+    "boundaryNotice": "Todos os nomes abaixo são interfaces do projeto, NÃO serviços IBM prontos. Nenhuma ABI, storage engine ou adaptação de produção está implementada.",
+    "position": {
+      "name": "SourcePosition",
+      "fields": [
+        {"name": "sourceId", "type": "string", "rule": "Alias estável aprovado, sem identificar pessoas ou organizações em artefatos públicos."},
+        {"name": "sourceEpoch", "type": "string", "rule": "Obrigatório em toda posição; identifica continuidade aprovada, não relógio de restart."},
+        {"name": "logStreamId", "type": "string", "rule": "Identidade lógica vinculada ao stream real somente em inventário protegido."},
+        {"name": "cursorBytesBase64", "type": "base64", "rule": "Base64 RFC4648 canônico, com padding, sem whitespace; bytes opacos para reposition."},
+        {"name": "blockId", "type": "object", "rule": "{encoding: base64, value: string, byteLength: integer}; identidade de bloco fornecida pelo wrapper, não endereço inventado."},
+        {"name": "recordOrdinal", "type": "decimal-string", "rule": "Inteiro não negativo canônico 0 ou [1-9][0-9]*; posição estável no bloco conforme adapter."},
+        {"name": "adapterFormatId", "type": "string", "rule": "Identifica versão de interpretação e de cursor; mudança exige migração aprovada."}
+      ],
+      "widths": {"cursorMaxBytes": null, "blockIdBytes": null, "recordOrdinalMax": null, "identifierMaxUtf8Bytes": null, "status": "BLOCKED_UNTIL_D002_D004_D010"},
+      "ordering": "Não comparar bytes, strings base64, blockId ou ordinais entre streams. Dentro de stream só usar ordem validada pelo wrapper; ledger local tem índice durável distinto.",
+      "identityVsResume": "Cursor de browse pode não ser identidade estável do registro. D004 MUST provar blockId+recordOrdinal no epoch; se insuficiente, revisar contrato antes de adapter.",
+      "decisionIds": ["D002", "D004", "D010", "D011"]
+    },
+    "interfaces": [
+      {
+        "id": "I001", "name": "Reader",
+        "operations": [
+          {"name": "open", "input": "SourceBinding aprovado, adapterFormatId, posição inicial ou W0, credencial somente leitura", "output": "handle efêmero + epoch/identidade verificados; erro AUTH/GAP/FORMAT", "effect": "Conecta e consulta sem habilitar logging nem escrever datasets."},
+          {"name": "read", "input": "handle + limite aprovado", "output": "RawRecord {position:SourcePosition, bytesBase64, byteLength, sourceTimestamp:null|fato, observationTimestamp, sourceFacts, completeness}", "effect": "READ avança somente em memória; não implica resume seguro."},
+          {"name": "reposition", "input": "handle + SourcePosition persistida + modo de inclusão documentado", "output": "posição validada ou STOP_GAP; política inclusiva/exclusiva explicitada por adapter", "effect": "Replay inclusivo é aceitável com deduplicação; jamais fallback para latest."}
+        ],
+        "implementationConstraint": "IXGCONN/IXGBRWSE são interfaces System Logger acessadas por wrapper de programação apropriado. ABI LE/AMODE, ponteiros, ownership, comprimentos, RC/reason, reconnect e release do buffer MUST ser documentados, não CALL de macro em COBOL.",
+        "requirementIds": ["CAP-002", "CAP-004", "CAP-005", "CAP-006", "CAP-017"],
+        "decisionIds": ["D001", "D002", "D004", "D005"]
+      },
+      {
+        "id": "I002", "name": "Normalizer",
+        "operations": [
+          {"name": "normalize", "input": "RawRecord completo + catálogo de layout/versão aprovado", "output": "Lista determinística de NormalizedRecord ou erro; 0 saídas só para controle explicitamente classificado", "effect": "Não publica; preserva mapeamento entre todo byte de origem relevante e fatos normalizados."}
+        ],
+        "layoutSeparation": "FLJB / DFHFCLGD é DSECT IBM do log, não copybook de saldo/extrato. Adapter por versão e caminho separa estrutura de log de payload de negócio; nenhuma tabela de offsets suposta.",
+        "requirementIds": ["CAP-004", "CAP-005", "CAP-006", "CAP-007", "CAP-008", "CAP-009"],
+        "decisionIds": ["D003", "D004", "D008", "D013"]
+      },
+      {
+        "id": "I003", "name": "StateStore",
+        "operations": [
+          {"name": "apply", "input": "RawRecord + todas as saídas normalizadas + readerFence + predecessor recuperável esperado", "output": "COMMITTED|ALREADY_APPLIED com hash igual, ou erro sem avanço confirmado", "effect": "Mesmo commit atômico: dedup ledger/hash, fragmentos/undo UOW, estado, readiness/manifests do spool, versões/identidades de eventos e RECOVERABLE_RESUME."},
+          {"name": "recover", "input": "binding/epoch + readerFence exclusivo", "output": "snapshot consistente de UOW, ledger, spool e resume", "effect": "Resolve commit ambíguo por chave/hash; nunca reinicializa estado perdido como stream novo."}
+        ],
+        "durability": "Seleção transação/WAL e garantias de flush/recovery BLOCKED em D009. Duas WRITE independentes não atendem apply. Spill deve ser incluído no commit ou pré-durável, imutável e referenciado com integridade; órfãos não autorizam resume.",
+        "largeCommit": "Materialização em lotes só é permitida se manifest durável e contagem/digest completo forem ativados atomicamente; nenhum filho publicável antes do manifest READY completo.",
+        "concurrency": "CAS do readerFence e do predecessor no mesmo commit impede leitor obsoleto ou apply fora de ordem. Cada batch preserva prefixo contíguo por reader; conflitos não viram sucesso.",
+        "requirementIds": ["CAP-010", "CAP-011", "CAP-012", "CAP-015"],
+        "decisionIds": ["D009", "D010", "D011"]
+      },
+      {
+        "id": "I004", "name": "Publisher",
+        "operations": [
+          {"name": "claim", "input": "workerId, tempo de lease aprovado e manifest READY", "output": "envelope imutável + leaseId + fence monotônico + expiresAt", "effect": "CAS durável READY->CLAIMED; materialização de UOW deve estar completa."},
+          {"name": "renew", "input": "eventId, leaseId, fence atual", "output": "nova expiração ou STALE_FENCE", "effect": "CAS durável; lease expirado não pode ser renovado por dono antigo."},
+          {"name": "publish", "input": "envelope congelado + partição de transporte aprovada", "output": "receipt de aceitação durável do broker ou erro/resultado ambíguo", "effect": "I/O externo fora da transação do StateStore e sem locks de negócio; pode duplicar."},
+          {"name": "ack", "input": "eventId + leaseId/fence válido + receipt", "output": "ACKNOWLEDGED durável ou STALE_FENCE/erro", "effect": "Transação no backend atualiza status e prefixo contíguo; ack do broker não prova aplicação no consumidor."}
+        ],
+        "requirementIds": ["CAP-012", "CAP-014", "CAP-015", "CAP-016"],
+        "decisionIds": ["D009", "D012", "D014"]
+      }
+    ],
+    "normalizedRecord": {
+      "types": ["CHANGE", "COMMIT", "BACKOUT", "BARRIER"],
+      "common": "type, position:SourcePosition, normalizationOrdinal(decimal-string), adapterFormatId, rawDigest(sha256), sourceFacts com referência documental; horário da origem nullable, horário observado não é ordem.",
+      "change": "uowKey, datasetId, datasetGeneration, datasetKind(BALANCE|STATEMENT), organization, keyBase64, keyLengthBytes, operation(INSERT|UPDATE|DELETE), beforeBase64|null, afterBase64|null, beforeLengthBytes|null, afterLengthBytes|null, ccsid, businessLayoutId, fragmentInfo, undoLink|null.",
+      "uowKey": "Tupla canônica [sourceId, sourceEpoch, regionInstanceId, recoveryContextId, uorBytesBase64, beginRecordIdentity]. Instância inclui encarnação de região; se início não estiver disponível, protocolo de recuperação aprovado precisa provar identidade equivalente antes de uso.",
+      "commit": "uowKey + outcomeEvidencePosition + completionProof + participantes/fronteiras esperados. COMMIT observado sozinho não prova completude de todos os fragments/streams.",
+      "backout": "uowKey + scope(FULL|PARTIAL) + undoTargets/savepoint + evidence. PARTIAL exige algoritmo de undo/compensação qualificado; não descartar UOW inteira por conveniência.",
+      "barrier": "reason(SNAPSHOT_W0|GENERATION_CHANGE|COVERAGE_CHANGE|ORDER_UNPROVEN) + affectedBindings + evidence; não é evento de negócio nem commit.",
+      "invariants": [
+        "Comprimento decodificado MUST corresponder ao declarado; key ranges e segmentos devem caber integralmente no buffer.",
+        "INSERT tem after completo; UPDATE exige after completo reconstruído com prova quando log contém delta; DELETE não tem after e exige chave/geração qualificada.",
+        "Before pode faltar apenas quando não necessário ao undo/reconstrução qualificados; antes/depois nunca são preenchidos com zeros ou leitura atual não consistente.",
+        "COMMIT/BACKOUT exigem UOW válida e status IBM mapeado por versão; BARRIER não carrega saldo ou lançamento.",
+        "Trailing partial: reter bytes/posição sem consumir registro, reassemble apenas por regra aprovada; EOF definitivo truncado vira FORMAT ou GAP, não ignorar.",
+        "Tipo/status desconhecido, comprimento impossível, CCSID/layout incompatível ou checksum inválido bloqueiam fluxo afetado; não mapear desconhecido para COMMIT.",
+        "Registros de controle ignoráveis exigem classificação explícita auditada e ledger resolvido; desconhecido não é ignorável."
+      ],
+      "requirementIds": ["CAP-005", "CAP-006", "CAP-007", "CAP-008", "CAP-009", "CAP-020", "CAP-022"]
+    },
+    "eventIdentity": {
+      "algorithm": "sha256-hex-lower(UTF8(canonical(identityTuple)))",
+      "identityTuple": ["MF_CAPTURE_V1", "sourceId", "sourceEpoch", "logStreamId", "blockId.value", "recordOrdinal", "normalizationOrdinal"],
+      "canonical": "Array JSON somente de strings, na ordem definida, UTF-8 sem BOM, sem espaços, ensure_ascii=false, escapes JSON obrigatórios, sem normalização Unicode implícita. Ordinais decimais e base64 canônicos; vetores aprovados em D011.",
+      "rules": "Identidade usa registro CHANGE de origem, não horário, offset do broker ou contador volátil. Distintos eventos do mesmo raw recebem normalizationOrdinal determinístico. Registros sintéticos de baseline usam namespace/protocolo próprio aprovado em D017.",
+      "immutableEnvelope": "Persistir corpo completo e digest na primeira materialização: ID, bytes, metadados, versão e commit evidence não mudam em retries. Mesmo ID com digest diferente => CONFLICT e bloqueio.",
+      "requirementIds": ["CAP-012"],
+      "decisionIds": ["D004", "D011", "D017"]
+    },
+    "entityOrdering": {
+      "entityKey": "[sourceId, sourceEpoch, datasetId, datasetGeneration, keyBase64]; conta+entryId para extrato conforme D013.",
+      "sourceVersion": "Obrigatório no envelope de produção destinado a aplicação ordenada: inteiro positivo monotônico por entidade, atribuído duravelmente somente após prova da ordem real de mudanças sobreviventes; não é LSN global presumido.",
+      "previousVersion": "Versão da última mudança sobrevivente emitida para a mesma entidade/epoch, inclusive tombstone; não necessariamente sourceVersion-1. Baseline define predecessor inicial; 0 apenas para criação/baseline sem predecessor qualificado.",
+      "proof": "D011 MUST demonstrar serialização/coordenação de writers, ordem intratransação e commits concorrentes por entidade. Ordem de chegada ao worker ou timestamps não são prova; cross-stream sem prova => BARRIER e caminho não suportado.",
+      "demoMapping": "src/vsam_offload/sync_contract.py exige inteiros sourceVersion>=1 e 0<=previousVersion<sourceVersion, source VSAM_ACCOUNT_BALANCE, ACCOUNT_BALANCE_V1, cp037 e UPSERT/DELETE. make_event sintetiza sequence_number e sourcePosition: não é adapter real.",
+      "integrationStatus": "NOT_IMPLEMENTED. Manter bytes reais intactos; não forçar sequence_number em copybook de negócio. Consumer/layout/envelope para extrato ou dados reais requerem trabalho separado e decisão D018; o exemplo não passa a aceitar extrato por este documento.",
+      "requirementIds": ["CAP-013", "CAP-030"],
+      "decisionIds": ["D011", "D013", "D018"]
+    },
+    "errors": [
+      {"class": "RETRYABLE", "examples": "I/O temporário, throttling, broker indisponível", "action": "Retry com backoff/limite aprovados; preservar estado/cursor; resultado de commit ambíguo consultado por chave/hash."},
+      {"class": "AUTH", "examples": "Acesso negado, identidade expirada", "action": "STOP_AUTH; nenhum bypass ou privilégio automático; alerta security/SRE e retomada autorizada."},
+      {"class": "FORMAT", "examples": "BOUNDS, status desconhecido, CCSID/schema drift, corrupção", "action": "STOP_FORMAT; quarentena protegida + hash; bloquear prefixo até correção/replay ou rebaseline aprovado."},
+      {"class": "GAP", "examples": "Cursor inválido/expirado, perda de segmento, epoch divergente", "action": "STOP_GAP; reter estado; recuperação de log ou rebaseline com nova continuidade aprovada; nunca latest."},
+      {"class": "PERMANENT", "examples": "Writer/organização/undo não suportado", "action": "BLOCKED; revisão da cobertura e decisão humana; não retry infinito."},
+      {"class": "CONFLICT", "examples": "Mesmo eventId com corpo diferente, ordem incompatível", "action": "HELD e alerta de integridade; não sobrescrever evento durável."},
+      {"class": "STALE_FENCE", "examples": "Lease ou readerFence antigo", "action": "Rejeitar mutação/ack, dono antigo cessa trabalho; reaquisição apenas pelo protocolo."}
+    ],
+    "errorObservability": "Cada erro registra classe, operação, binding redigido, epoch, posição protegida/hash, adapterFormatId, tentativa, gate e estado antes/depois. Payload/before image nunca em logs públicos. Não resolver erro apenas para avançar checkpoint."
+  },
+  "stateMachines": {
+    "uow": {
+      "states": ["OPEN", "COMMIT_OBSERVED", "BACKOUT_OBSERVED", "READY", "DISCARDED", "HELD"],
+      "transitions": [
+        {"from": "OPEN", "event": "CHANGE", "to": "OPEN", "guard": "Persistir partes/undo de forma atômica com resume."},
+        {"from": "OPEN", "event": "COMMIT", "to": "COMMIT_OBSERVED", "guard": "Evidência válida de desfecho, sem presumir completude."},
+        {"from": "COMMIT_OBSERVED", "event": "OUTSTANDING_CHANGE_OR_UNDO", "to": "COMMIT_OBSERVED", "guard": "Ingerir atomicamente partes/undo pertencentes à UOW e logicamente anteriores ao desfecho, ainda ausentes por fragmentação/streams; ordem de origem provada, nunca mudança posterior ao commit."},
+        {"from": "COMMIT_OBSERVED", "event": "COMPLETENESS_PROVEN", "to": "READY", "guard": "Todos os participantes/fragmentos presentes, undo resolvido e ordem por entidade provada; manifest ativado atomicamente."},
+        {"from": "OPEN", "event": "FULL_BACKOUT", "to": "BACKOUT_OBSERVED", "guard": "Desfecho completo documentado, mas completude da captura ainda não presumida; nunca publica."},
+        {"from": "BACKOUT_OBSERVED", "event": "OUTSTANDING_CHANGE_OR_UNDO", "to": "BACKOUT_OBSERVED", "guard": "Consumir atomicamente registros ainda ausentes e comprovadamente anteriores ao backout da mesma UOW, sem gerar efeitos de negócio; não são conflito apenas por chegada tardia."},
+        {"from": "BACKOUT_OBSERVED", "event": "COMPLETENESS_PROVEN", "to": "DISCARDED", "guard": "Fronteiras de todos os participantes/fragmentos resolvidas e registros anteriores classificados como abortados; somente então terminalizar e avaliar GC."},
+        {"from": "OPEN", "event": "PARTIAL_BACKOUT", "to": "OPEN", "guard": "Anular somente alvos provados, persistindo undo; recurso não qualificado => HELD e bloqueio."},
+        {"from": "OPEN", "event": "IN_DOUBT", "to": "HELD", "guard": "Reter partes; timeout só alerta, nunca commit."},
+        {"from": "COMMIT_OBSERVED", "event": "CONFLICT_OR_UNRECOVERABLE_MISSING_EVIDENCE", "to": "HELD", "guard": "Contradição, ordem não provada ou partes necessárias declaradas irrecuperáveis. Incompletude esperada permanece COMMIT_OBSERVED; timeout só alerta e nunca libera READY."},
+        {"from": "BACKOUT_OBSERVED", "event": "CONFLICT_OR_UNRECOVERABLE_MISSING_EVIDENCE", "to": "HELD", "guard": "Desfecho contraditório ou evidência necessária irrecuperável bloqueiam conclusão; atraso esperado permanece BACKOUT_OBSERVED sem publicação ou descarte antecipado do controle."},
+        {"from": "HELD", "event": "RECOVERY_PROVEN", "to": "OPEN", "guard": "Reconstituir estado com evidência aprovada e reaplicar desfecho; sem desbloqueio por relógio."}
+      ],
+      "lateRecords": "COMMIT_OBSERVED/BACKOUT_OBSERVED aceitam partes ainda ausentes comprovadamente anteriores ao desfecho. READY/DISCARDED só são terminais após completude; replay idêntico é no-op. Nova mudança desconhecida ou desfecho contraditório após essa prova => CONFLICT e revisão da prova; não reabrir silenciosamente.",
+      "requirementIds": ["CAP-007", "CAP-008", "CAP-009", "CAP-010", "CAP-011"]
+    },
+    "spool": {
+      "states": ["READY", "CLAIMED", "ACKNOWLEDGED"],
+      "transitions": [
+        {"from": "READY", "event": "CLAIM_CAS", "to": "CLAIMED", "guard": "Manifest completo; lease/fence duráveis."},
+        {"from": "CLAIMED", "event": "RENEW_CAS", "to": "CLAIMED", "guard": "Mesmo fence ainda válido; relógio/expiração do backend aprovado."},
+        {"from": "CLAIMED", "event": "ACK_CAS", "to": "ACKNOWLEDGED", "guard": "Receipt + lease/fence válido no commit durável."},
+        {"from": "CLAIMED", "event": "RETRY_OR_EXPIRED_LEASE", "to": "READY", "guard": "CAS invalida proprietário anterior; ambiguidade de rede pode duplicar entrega."}
+      ],
+      "delivery": "At-least-once com deduplicação downstream necessária. Fencing protege estado, não desfaz envio externo já realizado. ACKNOWLEDGED não significa APPLIEDDOWNSTREAM.",
+      "requirementIds": ["CAP-012", "CAP-014", "CAP-015"]
+    },
+    "checkpoints": [
+      {"name": "READ", "meaning": "Último registro observado; volátil, não autoriza restart nem GC."},
+      {"name": "RECOVERABLE_RESUME", "meaning": "Prefixo por reader cujos efeitos e partes UOW estão duráveis no mesmo commit. Replay inclusivo é deduplicado."},
+      {"name": "PUBLISH_PREFIX", "meaning": "Maior prefixo contíguo do ledger de publicação resolvido por ACK ou classificação explícita de não publicação; não max(ack)."},
+      {"name": "APPLIEDDOWNSTREAM", "meaning": "Evidência separada de aplicação/deduplicação/visibilidade no consumidor; não inferir de receipt do broker."},
+      {"name": "RECONCILE", "meaning": "Fronteira de comparação consistente com oráculo e janela qualificados, independente dos demais."}
+    ]
+  },
+  "cursorAndGc": {
+    "resumeInvariant": "Antes de avançar RECOVERABLE_RESUME, persistir payload integral e referências recuperáveis de toda UOW/fragmento. Se replay ainda depender de bytes externos, pin na primeira posição não resolvida necessária.",
+    "ledger": "Índice local durável por binding/epoch registra cada posição e filhos: PENDING, ACKNOWLEDGED, ABORTED, CONTROL ou EXCLUDED_APPROVED. Estes três últimos exigem evidência; erro/quarentena não é posição resolvida. Todos os filhos devem estar resolvidos.",
+    "holeExample": {"ledgerIndices": [101, 102, 103], "acked": [101, 103], "pending": [102], "publishPrefix": 101, "note": "Números são índices locais de exemplo, NÃO blockIDs IBM. Se 102 for controle comprovado, resolver explicitamente antes de avançar a 103."},
+    "longUow": "UOW aberta em posição anterior e commit de outra mais adiante: max(publicado) nunca libera log necessário à UOW longa. Payload totalmente durável pode permitir GC de origem após crash/recovery provados, não simples leitura.",
+    "sourceGc": "Coordenador autorizado usa fronteira mínima necessária de TODOS os readers/subscriptions/recovery consumers por stream, inclusive externos. Worker só reporta necessidade; não purga unilateralmente logs IBM. Sem prova de todos, retenção não é reduzida.",
+    "spoolGc": "ACKNOWLEDGED + prazo aprovado + requisitos de replay/reconciliação satisfeitos; dedup/tombstones mantidos por horizonte aprovado. Nunca purgar porque READ ou resume avançou.",
+    "cursorFailure": "Expirado/inválido => STOP_GAP, alerta, preservar evidência e recuperar a partir de log retido/restaurado; se impossível, rebaseline aprovado. Epoch diferente é bloqueado até binding e baseline novos, não convertido automaticamente.",
+    "decisionIds": ["D009", "D010", "D012", "D020"],
+    "requirementIds": ["CAP-010", "CAP-015", "CAP-016", "CAP-017"]
+  },
+  "snapshotProtocol": {
+    "status": "BLOCKED",
+    "W0": "Manifest consistente {snapshotId, sourceEpoch, datasetGenerations, positionsByStream, transactionStateIds, includedCommittedUows, pendingUows, layoutIds, counts, digests}. Fronteira não é timestamp nem um offset global.",
+    "steps": [
+      "1. Assinar matriz integral de writers e reservar retenção antes do snapshot. Definir nova epoch/binding e método aprovado D017.",
+      "2. Método pausa: provar todos os writers/utilitários suspensos, completar/backout UOWs ou resolver in-doubt, estabelecer vetor W0 e extrair imagens consistentes sob a mesma barreira.",
+      "3. Alternativa online: produto/protocolo de join deve provar imagem consistente, inclusão/exclusão de UOW atravessando W0 e disponibilidade das partes anteriores; sem essa prova não usar snapshot concorrente.",
+      "4. Persistir manifest de dados e IDs transacionais, chaves, contagens/digests e versões iniciais. Saldo e extrato cobertos pela mesma política de visibilidade.",
+      "5. Carregar baseline idempotente em destino isolado; replay com sobreposição deduplicada desde fronteiras necessárias, incluindo UOW começada antes de W0 e confirmada depois.",
+      "6. Conferir nenhum buraco/dupla aplicação na junção, tombstones e generations; reconciliar antes de liberar leitores. Retomar writers somente segundo protocolo aprovado.",
+      "7. Reload/restore não coberto em qualquer etapa cancela continuidade: BARRIER, nova aprovação/epoch e EXPLICIT_REBASELINE.",
+      "8. Antes de ativar baseline novo, consumidor instala registro durável de epoch/generation ativa por binding e troca coordenada da visão. Validação de epoch e aplicação MUST compartilhar a mesma fronteira atômica ou protocolo equivalente provado; eventos já aceitos pelo broker de epoch retirada são rejeitados/isolados, nunca comparados como versões da epoch nova."
+    ],
+    "requirementIds": ["CAP-018", "CAP-027"],
+    "decisionIds": ["D011", "D017", "D018", "D020"]
+  },
+  "businessSemantics": {
+    "balance": "Saldo é estado absoluto confirmado com escala/sinal e bytes qualificados. Não inferir lançamento a partir de delta do saldo; movimentos compensados podem não alterar saldo.",
+    "statement": "entryId imutável e estável aprovado pelo dataset owner; chave física só serve se unicidade e estabilidade entre restart/reload forem provadas. Sem entryId, extrato fica excluído, não recebe ID por timestamp.",
+    "correction": "D013 escolhe revisão da mesma entryId com versão ou novo lançamento de correção com relatedEntryId; preservar trilha, não inventar política contábil.",
+    "reversal": "Estorno mantém identidade própria e vínculo ao lançamento alvo conforme regra aprovada; não é automaticamente DELETE.",
+    "delete": "Tombstone exige identidade estável, versão e motivo/proveniência disponíveis. Delete inesperado bloqueia caminho; ESDS/RRDS/KSDS têm semânticas distintas, RBA não é identidade universal entre gerações.",
+    "visibility": "D018 deve escolher visibilidade por conta/UOW: buffer até manifest completo e liberar conjunto, ou leitura explicitamente eventual com marcador de completude e restrições aprovadas. UI não pode apresentar atomicidade inexistente.",
+    "cosmosLimit": "Atomicidade transacional Cosmos DB somente em uma partição lógica de um container, conforme API qualificada. Saldo+extrato em containers ou partições diferentes não ganham atomicidade por compartilhar UOW; solução de visibilidade é trabalho do consumidor, NÃO implementada aqui.",
+    "epochActivation": "Destino MUST persistir quais epochs/generations estão ativas/retiradas e condicionar toda aplicação a esse estado. Uma checagem seguida de escrita independente não basta: provar proteção contra corrida com ativação de baseline. Mensagens atrasadas, retries e consumidores antigos não podem modificar a visão nova; D018/D020 definem fencing e recuperação de ativação interrompida.",
+    "imagesAndPrivacy": "Before images podem existir somente no estado protegido para undo. Publicação padrão não inclui before/raw log; after payload apenas campos autorizados em D015. Registro original preservado internamente não autoriza envio integral ao Azure.",
+    "requirementIds": ["CAP-005", "CAP-019", "CAP-020", "CAP-021", "CAP-023", "CAP-027", "CAP-030"],
+    "decisionIds": ["D003", "D013", "D015", "D018"]
+  },
+  "failureMatrix": [
+    {"id": "F001", "point": "Após capture, antes de store", "durableState": "Resume anterior; partes novas não confirmadas.", "recovery": "Reposition anterior e replay, nenhum evento perdido.", "acceptanceIds": ["AT-010"]},
+    {"id": "F002", "point": "Antes do commit atômico", "durableState": "Tudo anterior ou WAL não confirmado, nunca metade lógica.", "recovery": "Rollback/recovery e replay completo.", "acceptanceIds": ["AT-011"]},
+    {"id": "F003", "point": "Após commit atômico, antes de resposta", "durableState": "Ledger/UOW/spool/resume já duráveis.", "recovery": "Consultar chave/hash; replay ALREADY_APPLIED com envelope igual.", "acceptanceIds": ["AT-012"]},
+    {"id": "F004", "point": "Publish aceito, resposta perdida", "durableState": "CLAIMED, sem ack durável.", "recovery": "Retry mesmo envelope; duplicação permitida, consumidor idempotente.", "acceptanceIds": ["AT-013"]},
+    {"id": "F005", "point": "Ack backend falha ou lease expira", "durableState": "CLAIMED até CAS/recovery; receipt não altera prefixo sozinho.", "recovery": "Reclaim com fence novo, rejeitar ack antigo; repetir se necessário.", "acceptanceIds": ["AT-015"]},
+    {"id": "F006", "point": "Restart em epoch diferente/cursor expirado", "durableState": "Estado antigo preservado, sem vínculo novo aprovado.", "recovery": "STOP_GAP; operador recupera continuidade ou aprova rebaseline.", "acceptanceIds": ["AT-018"]},
+    {"id": "F007", "point": "Schema drift/status desconhecido", "durableState": "Registro não resolvido; prefixo anterior.", "recovery": "STOP_FORMAT e qualificar adapter/layout antes de replay.", "acceptanceIds": ["AT-005"]},
+    {"id": "F008", "point": "Perda de autorização", "durableState": "Resume e spool conservados.", "recovery": "STOP_AUTH; alertar sem ampliar privilégio ou pular leitura.", "acceptanceIds": ["AT-002"]},
+    {"id": "F009", "point": "Evento corrompido ou ID com corpo diferente", "durableState": "Original imutável; conflito retido, não resolvido.", "recovery": "CONFLICT/FORMAT; recuperar bytes verdadeiros e auditar.", "acceptanceIds": ["AT-005", "AT-013"]},
+    {"id": "F010", "point": "Abend batch, rollback e restart", "durableState": "UOW real em OPEN/HELD/DISCARDED segundo evidência.", "recovery": "Sem commit por RC; reaplicar apenas sobreviventes confirmados.", "acceptanceIds": ["AT-008", "AT-009", "AT-022"]},
+    {"id": "F011", "point": "Mesma chave em writers/streams simultâneos", "durableState": "Ordem não provada bloqueia READY.", "recovery": "Provar serialização/coordenar ou excluir caminho afetado.", "acceptanceIds": ["AT-014", "AT-023"]},
+    {"id": "F012", "point": "DELETE inesperado, ESDS/RRDS não qualificado", "durableState": "Operação retida, sem tombstone inventado.", "recovery": "BLOCKED e revisão de identidade/organização.", "acceptanceIds": ["AT-024"]},
+    {"id": "F013", "point": "Disco cheio com UOW longa", "durableState": "Último commit completo e pin de log preservados.", "recovery": "Backpressure/alarme; retomar após capacidade, não descartar partes.", "acceptanceIds": ["AT-019"]},
+    {"id": "F014", "point": "Leitor antigo após failover", "durableState": "Novo readerFence durável.", "recovery": "apply antigo rejeitado sem alterar cursor/spool.", "acceptanceIds": ["AT-011"]}
+  ],
+  "acceptance": {
+    "executionStatus": "NOT_EXECUTED_ZOS",
+    "window": {
+      "definition": "Janela finita de harness sintético em ambiente z/OS autorizado: começa no W0 qualificado, enumera todas as UOW/entidades/writers do teste, termina no barrier W1 após desfecho de todas as UOW ou classificação HELD explícita.",
+      "startManifest": null, "endManifest": null, "durationSeconds": null, "writerCount": null, "uowCount": null,
+      "oracle": "Ledger independente do workload de teste registra mudanças tentadas, sobreviventes, desfechos e ordem por entidade; comparar também leitura consistente dos datasets. O output do capturador não pode ser seu próprio oráculo.",
+      "drain": "Após W1, drenar conforme prazo D016 aprovado; HELD ou ausência de evidência impede declarar janela aprovada.",
+      "invariants": [
+        {"metric": "lostConfirmedEvents", "target": 0, "unit": "events", "definition": "Mudanças sobreviventes confirmadas esperadas ausentes no destino após drain, incluindo extrato/tombstones."},
+        {"metric": "abortedEventsApplied", "target": 0, "unit": "events", "definition": "Mudanças abortadas/compensadas indevidamente aplicadas, detectadas também no histórico, não só saldo final."},
+        {"metric": "olderOverwrites", "target": 0, "unit": "overwrites", "definition": "Aplicações que substituem versão posterior por anterior na mesma entidade/epoch."}
+      ]
+    },
+    "tests": [
+      {"id": "AT-001", "requirementIds": ["CAP-001", "CAP-029"], "preconditions": "Inventário candidato sem assinatura; pelo menos um writer omitido.", "stimulus": "Tentar aprovar cobertura e habilitar entidade.", "expected": "Gate rejeita omissão; matriz relaciona cada writer/dataset/geração e revisão assinada é exigida.", "artifactIds": ["A001", "A008"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-002", "requirementIds": ["CAP-002", "CAP-003", "CAP-023", "CAP-022"], "preconditions": "Identidade worker de teste sem escrita e operador distinto.", "stimulus": "Verificar política, acesso de leitura, tentativa controlada de escrita em fixture e revogar leitura.", "expected": "Escrita negada, configuração não executável pelo worker, STOP_AUTH sem avanço; nenhum dado pessoal em diagnósticos.", "artifactIds": ["A002", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-003", "requirementIds": ["CAP-004", "CAP-028", "CAP-029"], "preconditions": "ABI/status/release incompletos; depois pacote documental de wrapper candidato.", "stimulus": "Solicitar geração de adapter e revisar conexão/browse/reposition contra documentação exata.", "expected": "Geração executável bloqueada até fechamento obrigatório; macros não viram CALL; prova inclui layouts, RC/reason, buffers e compatibilidade por caminho.", "artifactIds": ["A003", "A008", "A012"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-004", "requirementIds": ["CAP-005", "CAP-006", "CAP-030"], "preconditions": "Fixtures sintéticas aprovadas com binário, CCSID, sinal/escala e fronteiras de comprimento.", "stimulus": "Normalizar registros, inclusive log delta e fragmento dividido em duas leituras.", "expected": "Bytes originais idênticos, lengths exatos, fragmento retido até completo, imagem reconstruída só com prova; nenhum sequence_number inserido no negócio.", "artifactIds": ["A003", "A004"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-005", "requirementIds": ["CAP-006", "CAP-022"], "preconditions": "Resume válido e fixture truncada/corrompida ou status/layout desconhecido.", "stimulus": "Injetar comprimento fora de limites, EOF parcial definitivo, drift e digest inválido.", "expected": "STOP_FORMAT/GAP sem READY nem avanço além do registro; evidência redigida e replay só após correção aprovada.", "artifactIds": ["A004", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-006", "requirementIds": ["CAP-007"], "preconditions": "Duas regiões/encarnações reutilizam UOR e uma UOW atravessa restart.", "stimulus": "Intercalar registros e recuperar estado.", "expected": "UOW distintas não se misturam; replay da ocorrência original encontra a mesma chave; identidade insuficiente bloqueia.", "artifactIds": ["A004", "A005"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-007", "requirementIds": ["CAP-008", "CAP-024"], "preconditions": "Janela W0/W1 com oráculo; UOW commit e outra full backout em streams com atraso.", "stimulus": "Entregar commit antes de parte/undo logicamente anterior e depois completar. Entregar full backout antes de mudança anterior de outro stream, reiniciar e completar a captura.", "expected": "COMMIT_OBSERVED ingere partes sem publicar incompleta; READY só após prova. BACKOUT_OBSERVED preserva desfecho no restart, absorve mudança anterior sem falso CONFLICT e sem publicar; DISCARDED só com completude comprovada. 0 perdidos confirmados e 0 abortados aplicados.", "artifactIds": ["A004", "A005", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-008", "requirementIds": ["CAP-009"], "preconditions": "UOW in-doubt, evidência de desfecho indisponível.", "stimulus": "Ultrapassar timeout operacional e reiniciar worker.", "expected": "HELD persiste; alerta não converte para commit; recuperação documentada necessária.", "artifactIds": ["A005", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-009", "requirementIds": ["CAP-008", "CAP-009"], "preconditions": "Caminho declara suporte savepoint/undo parcial, ou é explicitamente não qualificado.", "stimulus": "Alterações A e B, rollback só de B, alteração C, commit.", "expected": "A/C apenas sobrevivem se suporte comprovado; sem suporte caminho bloqueado antes de produção, nunca full discard arbitrário ou publicação de B.", "artifactIds": ["A003", "A005", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-010", "requirementIds": ["CAP-010"], "preconditions": "Registro lido, nenhum apply persistido.", "stimulus": "Derrubar worker após capture antes de store.", "expected": "Resume anterior, replay restitui partes sem perda; nenhuma readiness órfã.", "artifactIds": ["A005", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-011", "requirementIds": ["CAP-010"], "preconditions": "Backend candidato e readerFence atual.", "stimulus": "Falhar antes/durante commit; após failover executar apply com fence antigo.", "expected": "Ledger/UOW/spool/resume todos anteriores ou todos novos; commit parcial impossível; fence antigo rejeitado.", "artifactIds": ["A005", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-012", "requirementIds": ["CAP-010", "CAP-012"], "preconditions": "apply confirmado em storage com resposta ainda não retornada.", "stimulus": "Crash, reopen e replay inclusivo do mesmo registro.", "expected": "ALREADY_APPLIED com hash igual; mesmos IDs, bytes e versões; nenhuma duplicação lógica.", "artifactIds": ["A004", "A005", "A006"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-013", "requirementIds": ["CAP-012", "CAP-014"], "preconditions": "Spool READY e consumidor idempotente de teste.", "stimulus": "Perder resposta após broker aceitar; repetir e tentar enviar mesmo ID com corpo alterado.", "expected": "Retry preserva envelope, entrega pode duplicar mas aplicação não; corpo divergente vira CONFLICT; sem lock de negócio durante rede.", "artifactIds": ["A006", "A007", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-014", "requirementIds": ["CAP-013", "CAP-024", "CAP-030"], "preconditions": "Ordem por entidade e predecessor qualificados, baseline inicial.", "stimulus": "Entregar versões fora de ordem, duplicate e tombstone seguido de atualização; contrastar com o exemplo sintético.", "expected": "0 olderOverwrites; gaps não resolvidos silenciosamente; predecessor segue emitido real, bytes reais inalterados e integração da referência identificada separadamente.", "artifactIds": ["A004", "A006", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-015", "requirementIds": ["CAP-014"], "preconditions": "CLAIMED por worker A; falha do backend de ack.", "stimulus": "Expirar lease, reclaim B, receber ack/renew tardio de A.", "expected": "Ack não durável não resolve posição; tokens antigos rejeitados; B pode repetir mesmo envelope, sem afirmar exactly-once.", "artifactIds": ["A005", "A006", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-016", "requirementIds": ["CAP-015", "CAP-016"], "preconditions": "Ledger de publicação com índices 101,102,103.", "stimulus": "Ack 101 e 103 deixando 102 pendente; depois resolver 102 com ack ou controle comprovado.", "expected": "Prefixo permanece 101 até resolução explícita; depois 103. READ, resume e downstream continuam métricas distintas; spool não purgado só por READ.", "artifactIds": ["A005", "A006"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-017", "requirementIds": ["CAP-015", "CAP-016"], "preconditions": "UOW longa anterior a commits curtos, dois readers/subscriptions.", "stimulus": "Avançar leitor rápido e propor GC pelo maior publish.", "expected": "GC negado além da necessidade mínima conjunta; distinguir payload durável suficiente de referência ainda dependente do log; nenhum purge unilateral.", "artifactIds": ["A005", "A008"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-018", "requirementIds": ["CAP-017", "CAP-022", "CAP-027"], "preconditions": "Estado recuperável com epoch anterior e mensagem antiga retida no broker.", "stimulus": "Expirar cursor, remover segmento ou restaurar/reload dataset; após rebaseline autorizado, entregar mensagem antiga/retry e simular corrida/crash na ativação.", "expected": "STOP_GAP/BARRIER preserva estado; latest proibido. Ativação recupera consistentemente epoch/generation ativa; evento de epoch retirada é rejeitado/isolado sem alterar baseline novo, mesmo em corrida.", "artifactIds": ["A006", "A007", "A008", "A009", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-019", "requirementIds": ["CAP-011", "CAP-016", "CAP-025"], "preconditions": "Limites aprovados de spill/backlog e log retido; UOW acima da memória.", "stimulus": "Encher spool/disco de teste, aplicar pressão e reiniciar.", "expected": "Spill íntegro, backpressure antes do limite, resume seguro e pin preservado; retomada completa. Limites null impedem declarar aprovação.", "artifactIds": ["A005", "A007", "A011"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-020", "requirementIds": ["CAP-018", "CAP-027"], "preconditions": "Todos os writers mapeados; método W0 candidato e UOW atravessando fronteira.", "stimulus": "Unir snapshot/deltas com sobreposição; tentar utilitário não coberto.", "expected": "Manifest inclui dados/transações e retenção, zero lacuna/dupla aplicação; writer não pausado invalida método pausa; utilitário exige rebaseline.", "artifactIds": ["A001", "A009", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-021", "requirementIds": ["CAP-019", "CAP-020"], "preconditions": "Layouts e entryIds qualificados, política correção/estorno aprovada.", "stimulus": "Dois lançamentos compensados sem delta líquido de saldo, correção, estorno e delete permitido.", "expected": "Saldo absoluto correto; ambos lançamentos presentes com IDs próprios, vínculos preservados e tombstone qualificado; nunca extrato derivado de saldo.", "artifactIds": ["A004", "A006", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-022", "requirementIds": ["CAP-008", "CAP-026"], "preconditions": "Cada modo batch listado, incluindo CICS, TVS/RRS condicional e não recuperável.", "stimulus": "Abend/restart entre atualizações; finalizar job RC=0 sem evidência de commit.", "expected": "Só UOW confirmada completa publica; RC=0 não libera. Modo sem boundary permanece WAIT_VALIDATED_BOUNDARY/EXCLUDE com impacto de cobertura explícito.", "artifactIds": ["A001", "A003", "A005", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-023", "requirementIds": ["CAP-013"], "preconditions": "Mesma entidade escrita em streams/regiões concorrentes.", "stimulus": "Inverter chegada e timestamps; sobrepor UOWs.", "expected": "Ordem segue prova independente aprovada, não chegada/clock; sem prova BARRIER bloqueia READY e caminho não é suportado.", "artifactIds": ["A004", "A005", "A008"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-024", "requirementIds": ["CAP-020", "CAP-022"], "preconditions": "KSDS inicial qualificado; ESDS/RRDS ou delete sem prova.", "stimulus": "Introduzir operação inesperada e reutilizar endereço após reload.", "expected": "Nenhum ID universal baseado em RBA nem tombstone fabricado; bloqueio e revisão de geração/organização.", "artifactIds": ["A001", "A004", "A007"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-025", "requirementIds": ["CAP-003", "CAP-023", "CAP-024", "CAP-025", "CAP-029", "CAP-031"], "preconditions": "Janela/carga/limiares aprovados, baseline operacional sem captura e artefatos sintéticos.", "stimulus": "Medir logging+captura, reconciliar W0/W1, revisar acesso/telemetria e estimativas.", "expected": "Três invariantes zero provadas, NFR comparados aos valores aprovados e regressões reportadas; artefatos redigidos e revisão assinada. Resultado null/ausente não passa.", "artifactIds": ["A002", "A008", "A010", "A011", "A012"], "executionStatus": "NOT_EXECUTED_ZOS"},
+      {"id": "AT-026", "requirementIds": ["CAP-021", "CAP-032"], "preconditions": "Reconciliação paralela concluída e política por conta/UOW aprovada.", "stimulus": "Atrasar extrato de UOW cujo saldo chegou; testar contas/containers distintos e fallback canário.", "expected": "Leitura respeita política sem alegar atomicidade cross-partition/container; fallback retorna leitura à origem sem alterar writers.", "artifactIds": ["A006", "A008", "A010"], "executionStatus": "NOT_EXECUTED_ZOS"}
+    ],
+    "artifactTemplates": [
+      {"id": "A001", "file": "writer-matrix.csv", "columns": ["writerAlias", "datasetAlias", "generation", "organization", "shareOptions", "accessMode", "loggingMode", "boundaryProof", "capabilityId", "decisionId", "ownerRole", "evidence", "approvedAt", "approvedBy"]},
+      {"id": "A002", "file": "access-review.json", "fields": ["principalsRedacted", "readAuthorizations", "writeDenials", "operatorSeparation", "tlsPolicy", "payloadAllowlist", "redactionCheck", "reviewer", "approvedAt"]},
+      {"id": "A003", "file": "adapter-mapping.csv", "columns": ["adapterFormatId", "path", "release", "docUrl", "docSection", "fieldOrStatus", "offsetEvidence", "lengthEvidence", "normalizedMeaning", "commitOrUndoRule", "reviewer"]},
+      {"id": "A004", "file": "source-trace.jsonl", "fields": ["runId", "testId", "synthetic", "rawDigest", "position", "uowKey", "normalizedType", "operation", "lengths", "layoutId", "ordinal", "expectedOracleId"]},
+      {"id": "A005", "file": "durability-trace.jsonl", "fields": ["runId", "testId", "faultPoint", "backendCommitId", "readerFence", "uowBefore", "uowAfter", "spoolManifest", "resumeBefore", "resumeAfter", "gcPin", "recoveryEvidence"]},
+      {"id": "A006", "file": "delivery-trace.jsonl", "fields": ["runId", "testId", "eventId", "bodyDigest", "entityAlias", "sourceVersion", "previousVersion", "leaseFence", "brokerReceipt", "durableAck", "publishPrefix", "appliedDownstream", "visibility"]},
+      {"id": "A007", "file": "fault-observations.csv", "columns": ["runId", "testId", "faultId", "injection", "errorClass", "stateBefore", "stateAfter", "alert", "replayOutcome", "evidenceDigest"]},
+      {"id": "A008", "file": "gate-review.json", "fields": ["gateId", "decisionIds", "requirementIds", "testIds", "evidenceDigests", "deviations", "residualRisk", "reviewerRoles", "approvedBy", "approvedAt", "result"]},
+      {"id": "A009", "file": "snapshot-manifest.json", "fields": ["runId", "snapshotId", "sourceEpoch", "datasetGenerations", "positionsByStream", "transactionStateIds", "includedCommittedUows", "pendingUows", "writerPauseProof", "joinProof", "counts", "digests"]},
+      {"id": "A010", "file": "reconciliation.csv", "columns": ["runId", "testId", "windowW0", "windowW1", "oracleId", "entityAlias", "expectedOutcome", "observedOutcome", "expectedVersion", "observedVersion", "lostConfirmedEvents", "abortedEventsApplied", "olderOverwrites"]},
+      {"id": "A011", "file": "nfr-measurements.csv", "columns": ["runId", "metric", "unit", "approvedThreshold", "windowSeconds", "workload", "baseline", "observed", "regression", "result", "evidenceDigest"]},
+      {"id": "A012", "file": "component-estimate.csv", "columns": ["component", "deliverable", "dependencies", "decisionIds", "effortRangePersonDays", "testEffortPersonDays", "skills", "risk", "shortRationale", "traceEvidence"]}
+    ],
+    "artifactPolicy": "Templates são nomes de entregáveis futuros, não arquivos já existentes nem provas executadas. Produzir só dados sintéticos neste repo público; traces reais ficam em repositório autorizado e aqui apenas referências redigidas aprovadas."
+  },
+  "nfr": {
+    "status": "BLOCKED_PENDING_APPROVAL",
+    "approvedAt": null,
+    "approvedBy": null,
+    "workloadDefinition": null,
+    "metrics": [
+      {"name": "sustainedCaptureRate", "unit": "records/second", "threshold": null, "direction": "minimum", "definition": "Registros completos persistidos por segundo sob mix e janela aprovados."},
+      {"name": "commitToBrokerP99", "unit": "milliseconds", "threshold": null, "direction": "maximum", "definition": "P99 entre commit de origem provado e receipt durável; erro/sincronização de clocks deve ser quantificado."},
+      {"name": "commitToVisibleP99", "unit": "milliseconds", "threshold": null, "direction": "maximum", "definition": "P99 até visibilidade conforme D018, incluindo UOW de extrato."},
+      {"name": "maxBacklogAge", "unit": "seconds", "threshold": null, "direction": "maximum", "definition": "Idade da mudança confirmada mais antiga ainda não ACKNOWLEDGED."},
+      {"name": "maxSpoolDisk", "unit": "bytes", "threshold": null, "direction": "maximum", "definition": "Bytes duráveis incluindo UOW, spill, spool, índices e WAL; reserva/backpressure antes do limite."},
+      {"name": "sourceLogRetention", "unit": "seconds", "threshold": null, "direction": "minimum", "definition": "Horizonte para snapshot, UOW longa, indisponibilidade e replay de todos os consumidores."},
+      {"name": "spoolRetentionAfterAck", "unit": "seconds", "threshold": null, "direction": "minimum", "definition": "Prazo pós-ack antes de elegibilidade GC, condicionado a replay/reconciliação."},
+      {"name": "dedupRetention", "unit": "seconds", "threshold": null, "direction": "minimum", "definition": "Horizonte de dedup/tombstones compatível com replay e retenção do transporte."},
+      {"name": "RPO", "unit": "seconds", "threshold": null, "direction": "maximum", "definition": "Horizonte de alterações confirmadas potencialmente não recuperáveis no cenário de desastre aprovado; não autoriza descarte no fluxo normal."},
+      {"name": "RTO", "unit": "seconds", "threshold": null, "direction": "maximum", "definition": "Tempo do incidente declarado até captura/visibilidade restauradas e continuidade reconciliada."},
+      {"name": "sourceCpuRegression", "unit": "percent", "threshold": null, "direction": "maximum", "definition": "Variação relativa de CPU de origem versus baseline sob a mesma carga; baseline zero exige métrica alternativa aprovada."}
+    ],
+    "limits": {"maxRecordBytes": null, "maxUowMemoryBytes": null, "maxUowSpillBytes": null, "maxOpenUows": null, "backpressureStartBytes": null, "leaseSeconds": null, "retryMaxAttempts": null, "retryMaxDelaySeconds": null, "acceptanceDrainSeconds": null},
+    "requirementIds": ["CAP-003", "CAP-011", "CAP-025"],
+    "decisionIds": ["D009", "D010", "D012", "D014", "D016"]
+  },
+  "decisionRegister": [
+    {"id": "D001", "topic": "Versões da plataforma", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["zOS release/PTFs", "CICS TS release/PTFs", "Enterprise COBOL compiler release"], "ownerRoleIds": ["R001", "R002"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D002", "topic": "ABI e build do wrapper", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["source format", "compiler options", "LE linkage", "AMODE/RMODE", "wrapper language", "pointer/length widths", "buffer ownership", "RC/reason mapping", "cursor encoding/widths"], "ownerRoleIds": ["R001"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D003", "topic": "Catálogo VSAM", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["dataset aliases/generations", "KSDS/ESDS/RRDS qualification", "key offset/length", "record bounds", "share options", "RLS/non-RLS", "recoverability", "business layouts/CCSID"], "ownerRoleIds": ["R004", "R001"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D004", "topic": "Logging e adapter por versão/caminho", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["LOGREPLICATE settings", "logStream binding", "IXGCONN/IXGBRWSE docs", "FLJB/DFHFCLGD exact DSECT", "offset/length/status evidence", "record identity stability", "browse reposition semantics", "commit mapping audit", "operator rollback"], "ownerRoleIds": ["R001", "R002"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D005", "topic": "RACF e identidade do worker", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["RACF profiles/read permissions", "business write deny proof", "state/spool access separate", "operator separation", "credential lifecycle"], "ownerRoleIds": ["R005", "R001"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D006", "topic": "Modos e cobertura batch", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["each job/writer path", "batch via CICS", "direct recoverable/nonrecoverable modes", "abend/restart protocol", "utility/reload inventory", "boundary proof or exclusion impact"], "ownerRoleIds": ["R003", "R002", "R004"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D007", "topic": "Disponibilidade/licenciamento", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["CICS VR availability/license/version", "DFSMStvs availability/license/version", "RRS configuration", "enlistment evidence", "approved alternative or exclusion if unavailable"], "ownerRoleIds": ["R001", "R003"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D008", "topic": "UOW, commit e recuperação", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["UOR occurrence identity", "region/recovery context", "participants/completeness", "commit/backout evidence", "partial rollback/savepoints", "in-doubt recovery", "undo reconstruction"], "ownerRoleIds": ["R002", "R003"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D009", "topic": "Motor de estado transacional", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["storage engine", "transaction/WAL/flush guarantees", "atomic apply/recovery", "spill/manifest integrity", "reader fencing", "lease CAS", "durable ack", "backup/failover"], "ownerRoleIds": ["R006", "R001"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D010", "topic": "Limites de capacidade", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["record/cursor/identifier bounds", "max open UOW", "memory/spill/disk bounds", "backpressure threshold", "long UOW workload"], "ownerRoleIds": ["R006", "R001"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D011", "topic": "Identidade e ordem por entidade", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["canonical hash test vectors", "multiwriter ordering proof", "cross-stream coordination", "intra-UOW order", "durable sourceVersion/predecessor", "epoch/identity migration"], "ownerRoleIds": ["R002", "R004", "R007"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D012", "topic": "Retenção, cursores e GC", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["all readers/subscriptions inventory", "minimum needed source positions", "logger retention ownership", "spool/dedup retention", "restore/reposition validation", "checkpoint ledger resolution"], "ownerRoleIds": ["R001", "R006"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D013", "topic": "Semântica de saldo/extrato", "required": true, "status": "OPEN", "blocks": ["ADAPTER_CODE", "ZOS_PROOF", "PRODUCTION"], "requiredFields": ["absolute balance layout", "immutable statement entryId", "scale/sign/CCSID", "correction/reversal policy", "delete/tombstone semantics", "delta-to-image reconstruction", "dataset generation identity"], "ownerRoleIds": ["R004", "R003"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D014", "topic": "Transporte e confirmação", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["protocol/SDK support on selected runtime", "partition strategy", "broker durable receipt semantics", "message size limits", "lease clock policy", "retry/ambiguity policy", "downstream dedup horizon"], "ownerRoleIds": ["R007", "R006"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D015", "topic": "Segurança e privacidade ponta a ponta", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["TLS version/cert verification", "transport authentication", "key rotation", "encryption at rest", "payload allowlist", "before/raw image exclusion", "protected trace retention"], "ownerRoleIds": ["R005", "R007"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D016", "topic": "NFR e impacto operacional", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["all metric thresholds/units", "workload and window", "p99 clock accuracy", "baseline regression", "backlog/disk/retention", "RPO/RTO scenario", "drain/alert thresholds"], "ownerRoleIds": ["R006", "R001", "R002"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D017", "topic": "Snapshot consistente W0", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["pause proof or product/protocol join", "all writer coverage", "transaction/data IDs", "cross-W0 UOW protocol", "baseline namespace/versions", "retention budget", "rebaseline authorization"], "ownerRoleIds": ["R004", "R003", "R002", "R007"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D018", "topic": "Consumidor e visibilidade", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["per-account/UOW visibility policy", "Cosmos API/partition/container limits", "manifest/release design", "durable active epoch/generation fencing", "atomic epoch-check/application or equivalent proven protocol", "real layout adapter vs synthetic reference implementation", "statement support", "read fallback"], "ownerRoleIds": ["R007", "R004"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D019", "topic": "Evidência e aprovação", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["independent oracle", "bounded W0/W1 test window", "fault injection authorization", "trace redaction", "reviewers/signatures", "component effort estimates", "SHOULD deviation process"], "ownerRoleIds": ["R006", "R004", "R005"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null},
+    {"id": "D020", "topic": "Operação e recuperação", "required": true, "status": "OPEN", "blocks": ["ZOS_PROOF", "PRODUCTION"], "requiredFields": ["STOP_GAP/AUTH/FORMAT runbooks", "recovery vs rebaseline authority", "epoch transition and interrupted activation recovery", "retired epoch delayed-delivery rejection", "restore verification", "canary abort criteria", "read fallback rehearsal"], "ownerRoleIds": ["R006", "R001", "R007"], "resolution": null, "evidence": null, "approvedAt": null, "approvedBy": null}
+  ],
+  "delivery": {
+    "gatePolicy": "Para um gate, todas as decisões required cujo blocks contém esse gate MUST estar resolvidas com evidência/aprovação. Escopo parcial exige matriz e revisão explícita, nunca ignorar decisão. ADAPTER_CODE é geração de adapter executável; ZOS_PROOF é entrada no ensaio autorizado, não certificação. PRODUCTION exige também todas as aceitações aplicáveis aprovadas.",
+    "draftAllowance": "Com decisões abertas, permitir apenas documento, templates, validação estática e exemplos não executáveis claramente rotulados. Disponibilidade de exemplos em samples/mainframe não comprova adapter.",
+    "llmStopRule": "LLM MUST parar geração de código executável se decisão obrigatória ADAPTER_CODE estiver aberta, especialmente ABI/status/offsets. Retornar lista de bloqueios, perguntas técnicas e entregáveis; nunca autofill 'assume CICS 6' ou RC presumido.",
+    "milestones": [
+      {"id": "M001", "name": "Discovery e matriz assinada", "dependsOnIds": [], "ownerRoleIds": ["R001", "R002", "R003", "R004", "R005"], "deliverables": "Inventário, documentação versionada, exclusões e estimativa por componente.", "exit": "Cobertura completa revisada e nenhum writer desconhecido.", "acceptanceIds": ["AT-001", "AT-002", "AT-003"], "artifactIds": ["A001", "A002", "A003", "A008", "A012"]},
+      {"id": "M002", "name": "Prova online de um KSDS", "dependsOnIds": ["M001"], "ownerRoleIds": ["R001", "R002", "R006"], "deliverables": "Wrapper/normalizer/store candidatos qualificados e fault harness sintético autorizado.", "exit": "Gate ADAPTER_CODE e entrada ZOS_PROOF satisfeitos; commit/backout, durabilidade e replay aprovados no escopo.", "acceptanceIds": ["AT-004", "AT-005", "AT-006", "AT-007", "AT-008", "AT-009", "AT-010", "AT-011", "AT-012", "AT-013", "AT-014", "AT-015", "AT-016", "AT-017", "AT-019"], "artifactIds": ["A003", "A004", "A005", "A006", "A007", "A008"]},
+      {"id": "M003", "name": "Qualificação de batch e organizações", "dependsOnIds": ["M002"], "ownerRoleIds": ["R003", "R002", "R004"], "deliverables": "Evidências por modo, licenças/disponibilidade verificadas, exclusões com impacto.", "exit": "Nenhuma inferência de commit por job RC; concorrência e operações qualificadas.", "acceptanceIds": ["AT-021", "AT-022", "AT-023", "AT-024"], "artifactIds": ["A001", "A003", "A004", "A005", "A008"]},
+      {"id": "M004", "name": "Snapshot inicial e junção", "dependsOnIds": ["M003"], "ownerRoleIds": ["R004", "R002", "R003", "R007"], "deliverables": "Manifest W0, retenção, ensaio de restore/reload e replay.", "exit": "Baseline consistente com fronteiras de todas as transações/writers.", "acceptanceIds": ["AT-018", "AT-020"], "artifactIds": ["A007", "A009", "A010"]},
+      {"id": "M005", "name": "Reconciliação paralela", "dependsOnIds": ["M004"], "ownerRoleIds": ["R006", "R004", "R007", "R005"], "deliverables": "Janela W0/W1, medições NFR e relatório de discrepâncias.", "exit": "Três invariantes zero, limiares aprovados e ausência de bloqueios não resolvidos.", "acceptanceIds": ["AT-025"], "artifactIds": ["A008", "A010", "A011"]},
+      {"id": "M006", "name": "Canário e cutover apenas de leitura", "dependsOnIds": ["M005"], "ownerRoleIds": ["R006", "R007", "R004"], "deliverables": "Política de visibilidade e ensaio de fallback de leitura à origem.", "exit": "PRODUCTION aprovado por todos os papéis; writers permanecem na origem.", "acceptanceIds": ["AT-026"], "artifactIds": ["A006", "A008", "A010"]}
+    ],
+    "estimationComponents": ["Inventário/recovery mapping", "Wrapper Logger e ABI", "Adapters por formato/caminho", "Reconstrução UOW/undo", "StateStore/WAL/spill/fencing", "Spool/transporte/ack", "Snapshot/join", "Consumer saldo/extrato/visibilidade", "Segurança/observabilidade/runbooks", "Harness/fault injection/reconciliação"],
+    "promptDeliverableTemplate": {
+      "input": "Escopo de writer/dataset sintético, decisões aprovadas, documentação versionada e IDs CAP/AT aplicáveis.",
+      "output": "Lista de bloqueios; tabela interface/campo/regra/documento; racional de desenho curto; tabela componente/esforço/faixa/dependências; traces esperados e evidências verificáveis.",
+      "reviewRule": "Solicitar artefatos e justificativa objetiva, não cadeia interna de pensamento. Não gerar código executável, SQL ou offsets enquanto gates faltarem."
+    },
+    "requirementIds": ["CAP-028", "CAP-029", "CAP-031", "CAP-032"]
+  }
+}

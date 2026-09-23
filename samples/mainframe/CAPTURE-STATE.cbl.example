@@ -1,0 +1,54 @@
+      *> DESIGN EXAMPLE - NOT COMPILED OR PRODUCTION READY.
+      *> COBOL-shaped control flow, not a complete program.
+      *> Every PERFORM is a PROJECT operation, not an IBM API.
+      *> Mapping: I001 Reader; I002 Normalizer; I003 StateStore.
+      *> Requirements: CAP-004..CAP-012, CAP-015..CAP-017.
+      *> Tests: AT-003..AT-012, AT-017..AT-019.
+      *> No direct CALL of IXGCONN/IXGBRWSE: implement a qualified wrapper.
+
+       CAPTURE-ONE-RECORD.
+           PERFORM READ-RAW-RECORD-USING-APPROVED-WRAPPER
+           EVALUATE TRUE
+               WHEN READ-TEMPORARILY-EMPTY
+                   PERFORM WAIT-WITHOUT-CHANGING-RESUME
+               WHEN READ-GAP-OR-AUTH-FAILURE
+                   PERFORM STOP-AND-REPORT
+               WHEN READ-COMPLETE
+                   PERFORM NORMALIZE-AND-CHECK-BOUNDS
+                   IF NOT NORMALIZATION-VALID
+                       PERFORM STOP-AND-REPORT
+                   ELSE
+                       PERFORM APPLY-CAPTURE-RECORD
+                   END-IF
+               WHEN OTHER
+                   PERFORM STOP-AND-REPORT
+           END-EVALUATE.
+
+       APPLY-CAPTURE-RECORD.
+           *> This contract must perform ONE atomic backend commit:
+           *> readerFence/predecessor CAS, source dedup, UOW fragments,
+           *> undo/decision state, spool readiness and recoverable resume.
+           *> Do not replace it with independent writes to two VSAM files.
+           PERFORM STATESTORE-APPLY-ATOMICALLY
+           EVALUATE TRUE
+               WHEN STORE-COMMITTED
+                   PERFORM REPORT-DURABLE-PROGRESS
+               WHEN STORE-ALREADY-APPLIED-WITH-SAME-HASH
+                   PERFORM REPORT-DURABLE-PROGRESS
+               WHEN OTHER
+                   *> Ambiguous commit: consult identity/hash on recovery.
+                   *> Do not advance an independent cursor here.
+                   PERFORM STOP-AND-REPORT
+           END-EVALUATE.
+
+      *> The StateStore implements the normative UOW state machine:
+      *> CHANGE -> OPEN; COMMIT -> COMMIT_OBSERVED.
+      *> FULL_BACKOUT -> BACKOUT_OBSERVED, not immediate terminal discard.
+      *> Either observed state may absorb PROVEN pre-outcome late parts.
+      *> Completeness + surviving changes -> READY for commit only.
+      *> Completeness after full backout -> DISCARDED; never publish.
+      *> Partial undo affects only qualified targets, not the whole UOW.
+      *> In-doubt/unknown ordering -> HELD, never commit on timeout.
+      *> Large UOW spill must be durable and integrity-checked.
+      *> Pin source history still needed by open UOWs or other readers.
+      *> Do not add SYNCPOINT to original business transactions.
