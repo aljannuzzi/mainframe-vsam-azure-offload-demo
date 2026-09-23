@@ -145,6 +145,13 @@ e o processamento Python. Os dados passam por **Blob Storage, Event Hubs e
 Cosmos DB reais**. Não há Data Factory ou Azure Functions executando etapas
 invisíveis: a tela identifica o serviço efetivamente usado em cada ação.
 
+O card **Arquitetura Azure** apresenta o pipeline e a responsabilidade de cada
+serviço, destacando a etapa selecionada. Mostra também o plano de controle
+(manifestos, leases e checkpoints), a escrita condicional no Cosmos e o desenho
+de rede e identidade do template. Os nomes dos recursos são carregados da
+configuração autenticada, não estão fixados no código público. Selecionar um
+componente do diagrama apenas abre sua etapa; não dispara o processamento.
+
 | Botão | O que acontece | Evidência intermediária |
 | --- | --- | --- |
 | 1. Origem | Gera registros binários sintéticos cp037/COMP-3 | Arquivo bruto, hexadecimal, tamanho e copybook |

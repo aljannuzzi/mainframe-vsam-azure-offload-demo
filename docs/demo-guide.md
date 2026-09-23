@@ -417,6 +417,15 @@ Ele mantém a origem **simulada**, mas usa os serviços reais do Azure para
 transferência, transporte e persistência. A tela apresenta os nomes dos recursos
 e links para o Azure Portal, além dos resultados retornados por cada operação.
 
+Use o card **Arquitetura Azure** para iniciar a apresentação ao time de
+arquitetura. Ele relaciona os serviços às etapas e separa fluxo de dados,
+controle de sincronismo e rede/identidade. As caixas de parsing, publicação e
+consumo são funções do mesmo host de computação, não recursos separados.
+Os registros decodificados são uma prévia: o Event Hubs transporta envelopes
+com os bytes brutos, e o consumidor aplica novamente o parser e os controles.
+O destaque acompanha a etapa selecionada; sucesso e erro continuam baseados
+na resposta real da execução, não na seleção do diagrama.
+
 Siga o provisionamento com `scripts\deploy-guided.ps1` descrito no README.
 Depois de entrar com o código de acesso, crie uma execução e dispare as etapas:
 origem binária, transferência, parsing, publicação, aplicação e conferência.

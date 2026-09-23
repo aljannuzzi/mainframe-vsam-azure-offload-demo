@@ -59,6 +59,24 @@ def test_login_and_logout(client):
     assert client.get("/api/config").status_code == 401
 
 
+def test_architecture_resource_details_are_only_returned_after_login(client, service):
+    service.config.return_value = {
+        "mode": "azure",
+        "services": [{
+            "id": "cosmos",
+            "details": {"account": "private-test-account", "database": "synthetic-db",
+                        "container": "balances", "partitionKey": "/accountId"},
+        }],
+    }
+    unauthorized = client.get("/api/config")
+    assert unauthorized.status_code == 401
+    assert "private-test-account" not in unauthorized.text
+    assert login(client).status_code == 200
+    assert client.get("/api/config").json()["services"][0]["details"]["account"] == "private-test-account"
+    assert client.post("/api/logout", headers=HEADERS).status_code == 200
+    assert "private-test-account" not in client.get("/api/config").text
+
+
 @pytest.mark.parametrize("payload", [{}, {"token": 1}, {"token": [TOKEN]}, {"token": TOKEN * 1000}])
 def test_login_validation_does_not_echo_secrets(client, payload):
     response = client.post("/api/session", json=payload, headers=HEADERS)

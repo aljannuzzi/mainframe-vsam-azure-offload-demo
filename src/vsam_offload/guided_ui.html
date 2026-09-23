@@ -164,14 +164,57 @@
     .footnote ul { padding-left: 20px; }
     .footnote li { margin-bottom: 8px; }
     .empty { color: var(--cp-text-muted); padding: 28px 0; }
+    .architecture { margin: 0 0 20px; }
+    .architecture > summary { font-size: 1.3rem; margin: 0; }
+    .architecture > summary h2 { display: inline; font-size: inherit; }
+    .architecture[open] > summary { margin-bottom: 16px; }
+    .architecture p { margin-bottom: 12px; }
+    .architecture-host { padding: 16px; background: var(--cp-bg-elevated); border: 1px solid var(--cp-border); border-radius: 0.625rem; overflow-wrap: anywhere; }
+    .architecture-host strong { display: block; margin: 4px 0; }
+    .architecture-flow { list-style: none; padding: 0; margin: 20px 0 44px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 24px; }
+    .architecture-flow > li { position: relative; min-width: 0; display: flex; }
+    .architecture-node { width: 100%; padding: 12px; display: flex; flex-direction: column; gap: 8px; text-align: left; font-size: .8125rem; font-weight: 400; border-color: var(--cp-border); overflow-wrap: anywhere; }
+    .architecture-node > span { display: block; width: 100%; }
+    .architecture-node .architecture-title { font-size: .9375rem; font-weight: 700; line-height: 1.35; }
+    .architecture-node[aria-current="step"] { border-color: var(--cp-accent); background: var(--cp-accent-soft); box-shadow: inset 0 3px var(--cp-accent); }
+    .architecture-selection { color: var(--cp-accent); font-weight: 700; min-height: 2.5em; }
+    .architecture-resource { color: var(--cp-text-muted); border-bottom: 1px solid var(--cp-border); padding-bottom: 8px; }
+    .architecture-format { color: var(--cp-text-muted); }
+    .architecture-state { margin-top: auto; padding-top: 8px; border-top: 1px solid var(--cp-border); }
+    .architecture-node[data-running="true"] .architecture-state { color: var(--cp-accent); font-weight: 700; }
+    .architecture-edge { position: absolute; left: calc(100% + 2px); top: 50%; width: 20px; text-align: center; color: var(--cp-accent); font-size: 1.125rem; }
+    .architecture-edge::before { content: "→"; }
+    .architecture-edge-label { position: absolute; top: calc(100% + 8px); left: 0; width: 100%; color: var(--cp-text-muted); font-size: .75rem; overflow-wrap: anywhere; }
+    .architecture-notes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+    .architecture-notes > aside { min-width: 0; padding: 16px; border: 1px solid var(--cp-border); border-radius: 0.625rem; font-size: .875rem; }
+    .architecture-notes ul { padding-left: 20px; margin: 0; }
+    .architecture-notes li { margin-bottom: 8px; }
+    .architecture-control { border-left: 3px solid var(--cp-accent) !important; }
+    .architecture-metadata { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+    .architecture-metadata > div { min-width: 0; padding: 12px; background: var(--cp-bg-elevated); border-radius: 0.625rem; }
+    .architecture-metadata dt { font-size: .8125rem; font-weight: 600; }
+    .architecture-metadata dd { margin: 4px 0 0; font-size: .8125rem; overflow-wrap: anywhere; }
+    .architecture-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     @media (min-width: 1450px) { .workspace { grid-template-columns: 360px minmax(0, 1fr); } }
     @media (max-width: 1100px) {
+      .architecture-flow { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 64px 28px; }
+      .architecture-flow > li:nth-child(4) { grid-area: 2 / 3; }
+      .architecture-flow > li:nth-child(5) { grid-area: 2 / 2; }
+      .architecture-flow > li:nth-child(6) { grid-area: 2 / 1; }
+      .architecture-flow > li:nth-child(3) .architecture-edge { top: calc(100% + 32px); left: calc(50% - 10px); }
+      .architecture-flow > li:nth-child(3) .architecture-edge::before { content: "↓"; }
+      .architecture-flow > li:nth-child(4) .architecture-edge,
+      .architecture-flow > li:nth-child(5) .architecture-edge { left: -24px; }
+      .architecture-flow > li:nth-child(4) .architecture-edge::before,
+      .architecture-flow > li:nth-child(5) .architecture-edge::before { content: "←"; }
       .shell { padding: 24px; }
       .workspace { grid-template-columns: 300px minmax(0, 1fr); }
       .split { grid-template-columns: 1fr; }
       .step { padding: 12px; }
     }
     @media (max-width: 800px) {
+      .architecture-notes { grid-template-columns: 1fr; }
+      .architecture-metadata { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .shell { padding: 16px; }
       .masthead { flex-direction: column; gap: 16px; }
       .badges { justify-content: flex-start; }
@@ -181,6 +224,15 @@
       .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .controls .card:first-child { grid-column: 1 / -1; }
       .metrics { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .architecture { padding: 16px; }
+      .architecture-flow { grid-template-columns: 1fr; }
+      .architecture-flow > li:nth-child(n) { grid-area: auto; }
+      .architecture-flow > li:nth-child(n) .architecture-edge { top: calc(100% + 32px); left: calc(50% - 10px); }
+      .architecture-flow > li:nth-child(n) .architecture-edge::before { content: "↓"; }
+      .architecture-selection { min-height: 0; }
+      .architecture-metadata { grid-template-columns: 1fr; }
     }
     @media (max-width: 480px) {
       .controls { grid-template-columns: 1fr; }
@@ -234,6 +286,41 @@
         <div><dt>Criada em</dt><dd id="created">—</dd></div>
         <div><dt>Atualizada em</dt><dd id="updated">—</dd></div>
       </dl>
+      <details id="architecture" class="card architecture" open hidden>
+        <summary id="architecture-summary"><h2>Arquitetura Azure</h2> <span class="small muted">· plano de dados e controle</span></summary>
+        <p class="small muted">Recursos da configuração autenticada, não uma confirmação de conectividade. Selecione um nó para inspecionar a etapa; nenhuma operação é executada pelo diagrama.</p>
+        <div id="architecture-host" class="architecture-host"></div>
+        <ol id="architecture-flow" class="architecture-flow" aria-label="Arquitetura do fluxo em seis etapas"></ol>
+        <p class="notice small"><strong>Preview não é o payload publicado.</strong> O parser lê o landing para gerar JSON de inspeção. O publicador na mesma aplicação envia envelopes com registros brutos; o SyncEngine faz parsing novamente na aplicação.</p>
+        <div class="architecture-notes">
+          <aside class="architecture-control" aria-labelledby="architecture-control-title">
+            <h3 id="architecture-control-title">Plano de controle</h3>
+            <p id="architecture-control-resource" class="mono small"></p>
+            <ul>
+              <li>Ramificação das etapas → Azure Blob Storage, contêiner de controle: manifesto da execução, lease de exclusão mútua e checkpoint.</li>
+              <li>Aplicação durável no Cosmos DB → só então checkpoint. Entrega <em>at-least-once</em> com idempotência por <code>accountId</code> e versão.</li>
+              <li><code>sourceVersion</code> ordena a origem; <code>previousVersion</code> valida o estado anterior. O ETag do Cosmos DB protege a escrita concorrente; não é a versão da origem nem o offset do Event Hubs.</li>
+              <li>O consumidor é acionado pelo clique na etapa 05. Não há loop automático de consumo nesta demonstração.</li>
+            </ul>
+          </aside>
+          <aside aria-labelledby="architecture-network-title">
+            <h3 id="architecture-network-title">Rede e identidade</h3>
+            <p><strong>Desenho do template guiado; não é teste de conectividade</strong></p>
+            <ul>
+              <li>Navegador → HTTPS + sessão autenticada → Azure Container Apps.</li>
+              <li>Managed Identity + RBAC para acesso aos serviços.</li>
+              <li>VNet + Private Endpoints + DNS privado para Blob Storage, Cosmos DB e Event Hubs.</li>
+              <li>Suporte do template: Azure Container Registry (imagem) e Log Analytics (logs). Nomes de instâncias não são presumidos.</li>
+            </ul>
+          </aside>
+        </div>
+        <h3 class="section-label">Configuração técnica · valores informados pela API</h3>
+        <dl id="architecture-metadata" class="architecture-metadata"></dl>
+        <div class="architecture-footer">
+          <span id="architecture-selection" class="small" role="status" aria-live="polite"></span>
+          <button id="architecture-evidence" type="button">Ver evidências</button>
+        </div>
+      </details>
       <div class="workspace">
         <aside class="controls" aria-label="Controles da apresentação">
           <section class="card">
@@ -361,6 +448,27 @@
         { kind: "checkpoints", label: "Checkpoints de aplicação", step: 4 }
       ];
       const TAB_IDS = ["bytes", "fields", "json", "services"];
+      const ARCHITECTURE = [
+        { title: "Origem simulada", service: "origin", resource: "ACA compartilhada + arquivo de origem no Blob",
+          operation: "Simulador na mesma aplicação; não é VSAM nativo nem conexão com z/OS.",
+          format: "Saída: EBCDIC cp037 / COMP-3 · registros fixos de 51 bytes.", edge: "51 bytes/registro" },
+        { title: "Landing binário", service: "storage", resource: "Azure Blob Storage",
+          operation: "Cópia do Blob de origem para o Blob de landing, preservando os bytes.",
+          format: "Entrada / saída: arquivo binário intacto.", edge: "bytes intactos" },
+        { title: "Parsing por copybook", service: "compute", resource: "Azure Container Apps · mesma aplicação",
+          operation: "Parser lê o landing e interpreta o copybook; JSON apenas para preview.",
+          format: "Entrada: bytes + layout. Saída: preview JSON; bruto preservado.", edge: "envelope bruto" },
+        { title: "Transporte de mudanças", service: "eventhubs", resource: "Azure Event Hubs",
+          operation: "Publicador na ACA envia envelopes brutos, não o JSON do preview.",
+          format: "Entrada / saída: registro bruto + chave e versão; partição por accountId.", edge: "accountId/versão" },
+        { title: "Aplicação versionada", service: "cosmos", resource: "ACA compartilhada → Azure Cosmos DB",
+          operation: "Consumidor / SyncEngine: novo parsing, validação de sourceVersion/previousVersion; escrita condicional por ETag.",
+          format: "Entrada: envelope bruto. Saída: documento em /accountId.", edge: "point reads" },
+        { title: "Consulta e reconciliação", service: "cosmos", resource: "Azure Cosmos DB → ACA compartilhada",
+          operation: "API faz point reads por id + accountId e reconcilia o destino com a origem.",
+          format: "Entrada: chave da conta. Saída: documento + divergências." }
+      ];
+      const architectureButtons = [];
       const state = { config: null, run: null, selected: 0, busy: false, activeStep: null,
         tab: "bytes", pendingHash: false, uncertain: false, hex: null, json: null };
       const stepButtons = [];
@@ -630,6 +738,95 @@
             !url.username && !url.password && !url.port ? url.href : null;
         } catch { return null; }
       }
+      function renderArchitectureMetadata() {
+        const container = $("architecture-metadata");
+        container.replaceChildren();
+        const groups = [
+          ["compute", "Computação", [["region", "Região"]]],
+          ["origin", "Origem simulada", [["host", "Host"], ["format", "Formato"], ["recordBytes", "Bytes/registro"]]],
+          ["storage", "Blob · landing", [["account", "Conta"], ["container", "Contêiner"]]],
+          ["eventhubs", "Event Hubs", [["namespace", "Namespace"], ["eventHub", "Event hub"], ["consumerGroup", "Grupo consumidor"], ["partitionKey", "Chave"]]],
+          ["cosmos", "Cosmos DB", [["account", "Conta"], ["database", "Banco"], ["container", "Contêiner"], ["partitionKey", "Partição"]]],
+          ["control", "Blob · controle", [["account", "Conta"], ["container", "Contêiner"]]]
+        ];
+        groups.forEach(([id, label, fields]) => {
+          const details = state.config.services.find(service => service.id === id)?.details;
+          const entries = fields.filter(([key]) => own(details, key) && details[key] != null && details[key] !== "");
+          if (!entries.length) return;
+          const group = node("div");
+          group.append(node("dt", label));
+          entries.forEach(([key, name]) => {
+            const value = key === "host" && details[key] === state.config.host.name ? "Computação compartilhada acima" : text(details[key]);
+            group.append(node("dd", name + ": " + value));
+          });
+          container.append(group);
+        });
+        if (!container.children.length) {
+          const group = node("div");
+          group.append(node("dt", "Detalhes opcionais"), node("dd", "Não informados pela API. Consulte os recursos configurados acima."));
+          container.append(group);
+        }
+      }
+      function renderArchitecture() {
+        const config = state.config;
+        $("architecture").hidden = !config;
+        if (!config) {
+          ["architecture-host", "architecture-flow", "architecture-control-resource", "architecture-metadata", "architecture-selection"].forEach(id => $(id).replaceChildren());
+          architectureButtons.length = 0;
+          $("architecture-evidence").disabled = true;
+          return;
+        }
+        const service = id => config.services.find(item => item.id === id);
+        const hostName = config.host.name || service("compute")?.name;
+        const host = $("architecture-host");
+        host.replaceChildren(node("span", "COMPUTAÇÃO COMPARTILHADA · Azure Container Apps", "eyebrow"),
+          node("strong", hostName || "Nome não informado"),
+          node("span", "Um único recurso executa simulador, parser, publicador, consumidor e API. São funções do mesmo recurso, não aplicações separadas.", "small"));
+        const control = service("control");
+        $("architecture-control-resource").textContent = control?.name ? "Recurso configurado: " + text(control.name) : "Nome do recurso de controle não informado.";
+        if (!architectureButtons.length) {
+          ARCHITECTURE.forEach((spec, index) => {
+            const item = node("li");
+            const button = node("button", undefined, "architecture-node");
+            button.id = "architecture-step-" + STEPS[index].id;
+            button.type = "button";
+            const selection = node("span", undefined, "architecture-selection");
+            const resource = node("span", undefined, "architecture-resource");
+            const status = node("span", undefined, "architecture-state");
+            button.append(node("span", String(index + 1).padStart(2, "0") + " · " + spec.title, "architecture-title"),
+              selection, resource, node("span", spec.operation), node("span", spec.format, "architecture-format"), status);
+            button.addEventListener("click", () => {
+              if (!state.config || state.busy) return;
+              selectStep(index);
+              render();
+            });
+            item.append(button);
+            if (spec.edge) {
+              const arrow = node("span", undefined, "architecture-edge");
+              arrow.setAttribute("aria-hidden", "true");
+              item.append(arrow, node("span", spec.edge + " · → " + String(index + 2).padStart(2, "0"), "architecture-edge-label"));
+            }
+            $("architecture-flow").append(item);
+            architectureButtons.push({ button, selection, resource, status });
+          });
+        }
+        architectureButtons.forEach(({ button, selection, resource, status }, index) => {
+          const spec = ARCHITECTURE[index];
+          const name = service(spec.service)?.name;
+          const showName = name && name !== hostName && index !== 5 && spec.service !== "compute";
+          resource.textContent = spec.resource + (showName ? " · " + text(name) : "");
+          resource.title = resource.textContent;
+          selection.textContent = state.selected === index ? "Etapa selecionada" : "Selecionar etapa";
+          status.textContent = "Execução: " + statusLabel(index);
+          button.dataset.running = String(statusLabel(index) === "Executando");
+          button.disabled = state.busy;
+          if (state.selected === index) button.setAttribute("aria-current", "step");
+          else button.removeAttribute("aria-current");
+        });
+        renderArchitectureMetadata();
+        $("architecture-selection").textContent = "Etapa selecionada: " + (state.selected + 1) + " · " + ARCHITECTURE[state.selected].title + ". Execução: " + statusLabel(state.selected) + ".";
+        $("architecture-evidence").disabled = state.busy;
+      }
       function renderServices() {
         const container = $("services");
         container.replaceChildren();
@@ -752,6 +949,7 @@
         });
         $("limitations").replaceChildren();
         (Array.isArray(state.config?.limitations) ? state.config.limitations : []).forEach(item => $("limitations").append(node("li", item)));
+        renderArchitecture();
         renderEvidence();
       }
       async function copy(value) {
@@ -879,6 +1077,13 @@
       });
       $("copy-hex").addEventListener("click", () => void copy(state.hex));
       $("copy-json").addEventListener("click", () => void copy(state.json));
+      $("architecture-evidence").addEventListener("click", () => {
+        if (!state.config || state.busy) return;
+        selectStep(state.selected);
+        render();
+        $("tab-" + state.tab).focus();
+        $("evidence-title").scrollIntoView({ block: "start" });
+      });
       window.addEventListener("hashchange", () => {
         if (state.busy) { state.pendingHash = true; return; }
         if (state.config) void resumeHash();

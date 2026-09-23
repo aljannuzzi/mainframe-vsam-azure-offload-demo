@@ -309,15 +309,22 @@ class AzureCloud:
         host = dict(name=app, type=compute_type, portalUrl=portal(f"{provider}/{app}"))
         services = [
             dict(id="origin", name="SIMULADOR cp037", type=f"Simulador em {compute_type}", portalUrl=host["portalUrl"],
-                 role="Gera dados sintéticos; nenhum mainframe conectado"),
-            dict(id="compute", **host, role="Executa cada etapa somente após clique"),
+                 role="Gera dados sintéticos; nenhum mainframe conectado",
+                 details=dict(host=app, format="cp037 / COMP-3", recordBytes=51)),
+            dict(id="compute", **host, role="Executa cada etapa somente após clique",
+                 details=dict(region=env["AZURE_LOCATION"])),
             dict(id="storage", name=storage, type="Azure Blob Storage",
-                 portalUrl=portal(f"Microsoft.Storage/storageAccounts/{storage}"), role="Bytes e evidências imutáveis"),
+                 portalUrl=portal(f"Microsoft.Storage/storageAccounts/{storage}"), role="Bytes e evidências imutáveis",
+                 details=dict(account=storage, container=self.raw.container_name)),
             dict(id="eventhubs", name=self.hub, type="Azure Event Hubs",
-                 portalUrl=portal(f"Microsoft.EventHub/namespaces/{namespace}/eventhubs/{self.hub}"), role="Transporte real de eventos"),
+                 portalUrl=portal(f"Microsoft.EventHub/namespaces/{namespace}/eventhubs/{self.hub}"), role="Transporte real de eventos",
+                 details=dict(namespace=namespace, eventHub=self.hub, consumerGroup=self.group, partitionKey="accountId")),
             dict(id="cosmos", name=self.container_name, type="Azure Cosmos DB",
-                 portalUrl=portal(f"Microsoft.DocumentDB/databaseAccounts/{cosmos}"), role="Destino durável com CAS"),
+                 portalUrl=portal(f"Microsoft.DocumentDB/databaseAccounts/{cosmos}"), role="Destino durável com CAS",
+                 details=dict(account=cosmos, database=self.database_name, container=self.container_name,
+                              partitionKey="/accountId")),
             dict(id="control", name=self.control.container_name, type="Azure Blob Storage",
-                 portalUrl=portal(f"Microsoft.Storage/storageAccounts/{storage}"), role="Manifestos, leases e checkpoints por execução"),
+                 portalUrl=portal(f"Microsoft.Storage/storageAccounts/{storage}"), role="Manifestos, leases e checkpoints por execução",
+                 details=dict(account=storage, container=self.control.container_name)),
         ]
         return dict(mode="azure", host=host, services=services, location=env["AZURE_LOCATION"])
